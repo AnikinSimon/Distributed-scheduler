@@ -1,1 +1,1 @@
-# Distributed-sheduler
+# Distributed-scheduler
