@@ -18,8 +18,8 @@ type JobsRepo struct {
 	pool *pgxpool.Pool
 }
 
-func NewJobsRepo(cfg config.StorageConfig) *JobsRepo {
-	pl, err := pgxpool.New(context.TODO(), getConnString(cfg))
+func NewJobsRepo(ctx context.Context, cfg config.StorageConfig) *JobsRepo {
+	pl, err := pgxpool.New(ctx, getConnString(cfg))
 	if err != nil {
 		panic(err)
 	}

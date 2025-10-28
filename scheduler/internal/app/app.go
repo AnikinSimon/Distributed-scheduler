@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/repo/postgres"
@@ -9,13 +10,21 @@ import (
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func Start(cfg config.Config) error {
 	// TODO: Create jobs repo
-	jobsRepo := postgres.NewJobsRepo(cfg.Storage) // TODO: pg config
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage) // TODO: pg config
 
 	scheduler := cases.NewSchedulerCase(jobsRepo)
 
@@ -23,10 +32,8 @@ func Start(cfg config.Config) error {
 
 	strictHandler := gen.NewStrictHandler(server, nil)
 
-	// Настраиваем Chi роутер
 	router := chi.NewRouter()
 
-	// Добавляем middleware
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Logger)
@@ -42,8 +49,17 @@ func Start(cfg config.Config) error {
 		Handler: router,
 	}
 
-	if err := httpServer.ListenAndServe(); err != nil {
-		return err
-	}
+	go httpServer.ListenAndServe()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+
+	sign := <-stop
+	cancel()
+
+	log.Println("Stopping application", slog.String("signal", sign.String()))
+
+	httpServer.Shutdown(ctx)
+
 	return nil
 }
