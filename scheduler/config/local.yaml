@@ -1,0 +1,9 @@
+env: "local"
+storage:
+  host: "postgres"
+  user: "user"
+  password: "password"
+  port: 5432
+  database: "scheduler"
+http:
+  port: 8080
