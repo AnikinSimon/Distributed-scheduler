@@ -23,6 +23,7 @@ func NewSchedulerCase(jobsRepo repo.Jobs) *SchedulerCase {
 func (r *SchedulerCase) Create(ctx context.Context, job *entity.Job) (string, error) {
 	job.Id = uuid.NewString()
 	job.CreatedAt = time.Now().UnixMilli()
+	job.Status = "queued"
 	fmt.Println(job.Id)
 
 	jobDto := repo.JobDTO(*job)

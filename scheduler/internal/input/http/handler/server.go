@@ -83,7 +83,7 @@ func (r *Server) GetJobsJobId(ctx context.Context, request gen.GetJobsJobIdReque
 	job, err := r.schedulerCase.Get(ctx, request.JobId)
 
 	if err != nil {
-		return gen.GetJobsJobId404Response{}, err
+		return gen.GetJobsJobId404Response{}, nil
 	}
 
 	return fromEntityJobGetResponse(job), nil
