@@ -112,14 +112,21 @@ func (r *JobsRepo) Read(ctx context.Context, jobID string) (*repo.JobDTO, error)
 		lastFinishedAtInt64 = lastFinishedAt.UnixMilli()
 	}
 
-	return &repo.JobDTO{
+	res := &repo.JobDTO{
 		Id:             jobID,
 		Interval:       interval,
 		Payload:        payload,
 		Status:         status,
 		CreatedAt:      createdAt.UnixMilli(),
 		LastFinishedAt: lastFinishedAtInt64,
-	}, nil
+	}
+
+	if interval == nil {
+		once := "once"
+		res.Once = &once
+	}
+
+	return res, nil
 }
 
 func (r *JobsRepo) Update(ctx context.Context, job *repo.JobDTO) error {
@@ -202,6 +209,11 @@ func (r *JobsRepo) List(ctx context.Context, status string) ([]*repo.JobDTO, err
 			Status:         status,
 			CreatedAt:      createdAt.UnixMilli(),
 			LastFinishedAt: lastFinishedAtInt64,
+		}
+
+		if interval == nil {
+			once := "once"
+			job.Once = &once
 		}
 
 		jobs = append(jobs, job)
