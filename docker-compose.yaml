@@ -1,0 +1,45 @@
+services:
+  backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+#      migrate:
+#        condition: service_completed_successfully
+    build: .
+    ports:
+      - 8080:8080
+    environment:
+      - CONFIG_PATH=./config/local.yaml
+
+  postgres:
+    image: postgres:17.3
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=scheduler
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d scheduler"]
+      interval: 3s
+      timeout: 2s
+      retries: 2
+
+  migrate:
+    image: gomicro/goose:3.25.0
+    container_name: goose_migrate
+    depends_on:
+      - postgres
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "user=user password=password host=postgres port=5432 dbname=scheduler sslmode=disable"
+      GOOSE_MIGRATION_DIR: "/migrations"
+    volumes:
+      - ./migrations:/migrations
+    command: [
+      "goose",
+      "up"
+    ]
+
+volumes:
+  postgres:
