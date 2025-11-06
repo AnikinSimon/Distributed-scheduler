@@ -10,8 +10,7 @@ import (
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"log"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,9 +23,17 @@ func Start(cfg config.Config) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage) // TODO: pg config
+	logger, err := zap.NewProduction()
 
-	scheduler := cases.NewSchedulerCase(jobsRepo)
+	defer logger.Sync()
+
+	if err != nil {
+		return err
+	}
+
+	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage, logger) // TODO: pg config
+
+	scheduler := cases.NewSchedulerCase(jobsRepo, logger)
 
 	server := handler.NewServer(scheduler)
 
@@ -51,13 +58,15 @@ func Start(cfg config.Config) error {
 
 	go httpServer.ListenAndServe()
 
+	logger.Info("Stopping application", zap.Int("port", cfg.HTTP.Port))
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 
 	sign := <-stop
 	cancel()
 
-	log.Println("Stopping application", slog.String("signal", sign.String()))
+	logger.Info("Stopping application", zap.String("signal", sign.String()))
 
 	httpServer.Shutdown(ctx)
 

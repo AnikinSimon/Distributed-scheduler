@@ -24,8 +24,6 @@ func NewServer(schCase *cases.SchedulerCase) *Server {
 func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject) (gen.PostJobsResponseObject, error) {
 	jobID, err := r.schedulerCase.Create(ctx, toEntityJob(request.Body))
 
-	fmt.Println(jobID)
-
 	if err != nil {
 		return nil, err // 500
 	}

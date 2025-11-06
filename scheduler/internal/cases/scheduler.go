@@ -2,9 +2,9 @@ package cases
 
 import (
 	"context"
-	"fmt"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,11 +12,13 @@ import (
 
 type SchedulerCase struct {
 	jobsRepo repo.Jobs
+	logger   *zap.Logger
 }
 
-func NewSchedulerCase(jobsRepo repo.Jobs) *SchedulerCase {
+func NewSchedulerCase(jobsRepo repo.Jobs, logger *zap.Logger) *SchedulerCase {
 	return &SchedulerCase{
 		jobsRepo: jobsRepo,
+		logger:   logger,
 	}
 }
 
@@ -24,10 +26,8 @@ func (r *SchedulerCase) Create(ctx context.Context, job *entity.Job) (string, er
 	job.Id = uuid.NewString()
 	job.CreatedAt = time.Now().UnixMilli()
 	job.Status = "queued"
-	fmt.Println(job.Id)
 
 	jobDto := repo.JobDTO(*job)
-	fmt.Println(jobDto)
 	return job.Id, r.jobsRepo.Create(ctx, &jobDto)
 }
 

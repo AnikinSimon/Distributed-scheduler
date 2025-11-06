@@ -9,6 +9,7 @@ import (
 	uuid2 "github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -16,15 +17,17 @@ var _ repo.Jobs = (*JobsRepo)(nil)
 
 type JobsRepo struct {
 	pool *pgxpool.Pool
+	log  *zap.Logger
 }
 
-func NewJobsRepo(ctx context.Context, cfg config.StorageConfig) *JobsRepo {
+func NewJobsRepo(ctx context.Context, cfg config.StorageConfig, logger *zap.Logger) *JobsRepo {
 	pl, err := pgxpool.New(ctx, getConnString(cfg))
 	if err != nil {
 		panic(err)
 	}
 	return &JobsRepo{
-		pool: pl,
+		pool:   pl,
+		logger: logger,
 	}
 }
 
