@@ -20,7 +20,7 @@ func toEntityJob(job *gen.JobCreate) *entity.Job {
 
 func fromEntityJobGetResponse(job *entity.Job) gen.GetJobsJobId200JSONResponse {
 	genJob := gen.Job{
-		Id:             job.Id,
+		Id:             job.Id.String(),
 		Once:           job.Once,
 		Payload:        job.Payload,
 		Interval:       job.Interval,

@@ -57,11 +57,9 @@ func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 		intervalValue = *job.Interval
 	}
 
-	uuid := uuid2.MustParse(job.Id)
-
 	ib.InsertInto("job").
 		Cols("id", "inter", "payload", "status", "created_at").
-		Values(uuid, intervalValue, payloadValue, job.Status, time.UnixMilli(job.CreatedAt))
+		Values(job.Id, intervalValue, payloadValue, job.Status, time.UnixMilli(job.CreatedAt))
 
 	sql, args := ib.Build()
 
@@ -73,17 +71,12 @@ func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 	return nil
 }
 
-func (r *JobsRepo) Read(ctx context.Context, jobID string) (*repo.JobDTO, error) {
+func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-
-	jobUUID, err := uuid2.Parse(jobID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid job ID format: %w", err)
-	}
 
 	sb.Select("id", "inter", "payload", "status", "created_at", "last_finished_at").
 		From("job").
-		Where(sb.Equal("id", jobUUID))
+		Where(sb.Equal("id", jobID))
 
 	sql, args := sb.Build()
 
@@ -96,7 +89,7 @@ func (r *JobsRepo) Read(ctx context.Context, jobID string) (*repo.JobDTO, error)
 		lastFinishedAt *time.Time
 	)
 
-	err = r.pool.QueryRow(ctx, sql, args...).Scan(
+	err := r.pool.QueryRow(ctx, sql, args...).Scan(
 		&id, &interval, &payloadData, &status, &createdAt, &lastFinishedAt,
 	)
 	if err != nil {
@@ -137,16 +130,11 @@ func (r *JobsRepo) Update(ctx context.Context, job *repo.JobDTO) error {
 	return nil
 }
 
-func (r *JobsRepo) Delete(ctx context.Context, jobID string) error {
+func (r *JobsRepo) Delete(ctx context.Context, jobID uuid2.UUID) error {
 	db := sqlbuilder.PostgreSQL.NewDeleteBuilder()
 
-	jobUUID, err := uuid2.Parse(jobID)
-	if err != nil {
-		return fmt.Errorf("invalid job ID format: %w", err)
-	}
-
 	db.DeleteFrom("job").
-		Where(db.Equal("id", jobUUID))
+		Where(db.Equal("id", jobID))
 
 	sql, args := db.Build()
 
@@ -206,7 +194,7 @@ func (r *JobsRepo) List(ctx context.Context, status string) ([]*repo.JobDTO, err
 		}
 
 		job := &repo.JobDTO{
-			Id:             id.String(),
+			Id:             id,
 			Interval:       interval,
 			Payload:        payload,
 			Status:         status,

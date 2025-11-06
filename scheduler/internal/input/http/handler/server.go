@@ -43,7 +43,7 @@ func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) 
 	jobs := make([]gen.Job, 0, len(jobsEntity))
 	for _, jobEntity := range jobsEntity {
 		job := gen.Job{
-			Id:             jobEntity.Id,
+			Id:             jobEntity.Id.String(),
 			Status:         gen.Status(jobEntity.Status),
 			CreatedAt:      jobEntity.CreatedAt,
 			LastFinishedAt: jobEntity.LastFinishedAt,

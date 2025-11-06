@@ -6,4 +6,4 @@ storage:
   port: 5432
   database: "scheduler"
 http:
-  port: 8080
+  port: 8090

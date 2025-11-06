@@ -7,7 +7,7 @@ services:
 #        condition: service_completed_successfully
     build: .
     ports:
-      - 8080:8080
+      - 8090:8090
     environment:
       - CONFIG_PATH=./config/local.yaml
 
