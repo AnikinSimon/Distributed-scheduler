@@ -4,12 +4,14 @@ import (
 	"flag"
 	"github.com/ilyakaznacheev/cleanenv"
 	"os"
+	"time"
 )
 
 type Config struct {
-	Env     string        `yaml:"env" env-default:"local"`
-	Storage StorageConfig `yaml:"storage" env-required:"true"`
-	HTTP    HTTPConfig    `yaml:"http"`
+	Env               string        `yaml:"env" env-default:"local"`
+	SchedulerInterval time.Duration `yaml:"scheduler_interval" env-default:"1m"`
+	Storage           StorageConfig `yaml:"storage" env-required:"true"`
+	HTTP              HTTPConfig    `yaml:"http"`
 }
 
 type HTTPConfig struct {

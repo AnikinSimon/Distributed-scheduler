@@ -3,11 +3,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-#      migrate:
-#        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
     build: .
     ports:
-      - 8090:8090
+      - "8090:8090"
     environment:
       - CONFIG_PATH=./config/local.yaml
 
@@ -19,6 +19,8 @@ services:
       - POSTGRES_DB=scheduler
     volumes:
       - postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d scheduler"]
       interval: 3s
@@ -29,7 +31,8 @@ services:
     image: gomicro/goose:3.25.0
     container_name: goose_migrate
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: "user=user password=password host=postgres port=5432 dbname=scheduler sslmode=disable"

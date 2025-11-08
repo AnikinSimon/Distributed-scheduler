@@ -1,4 +1,5 @@
 env: "local"
+scheduler_interval: 1m
 storage:
   host: "postgres"
   user: "user"

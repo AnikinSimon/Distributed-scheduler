@@ -1,33 +1,50 @@
 package handler
 
 import (
+	"fmt"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
+	"time"
 )
 
-func toEntityJob(job *gen.JobCreate) *entity.Job {
-
-	res := &entity.Job{}
-	res.Interval = job.Interval
-	res.Once = job.Once
-	if job.Payload != nil {
-		res.Payload = *job.Payload
+func toEntityJob(job *gen.JobCreate) (*entity.Job, error) {
+	entityJob := &entity.Job{}
+	if job.Interval != nil {
+		interval, err := time.ParseDuration(*job.Interval)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse interval: %w", err)
+		}
+		entityJob.Interval = &interval
+		entityJob.Kind = entity.JobKindInterval
+	} else if job.Once != nil {
+		once, err := time.Parse(time.RFC3339, *job.Once)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse once datetime: %w", err)
+		}
+		onceSeconds := once.UnixMilli()
+		entityJob.Once = &onceSeconds
+		entityJob.Kind = entity.JobKindOnce
 	}
+	entityJob.Payload = job.Payload
 
-	return res
-
+	return entityJob, nil
 }
 
-func fromEntityJobGetResponse(job *entity.Job) gen.GetJobsJobId200JSONResponse {
-	genJob := gen.Job{
-		Id:             job.Id.String(),
-		Once:           job.Once,
-		Payload:        job.Payload,
-		Interval:       job.Interval,
-		Status:         gen.Status(job.Status),
-		LastFinishedAt: job.LastFinishedAt,
-		CreatedAt:      job.CreatedAt,
+func fromEntityJobGetGenJob(job *entity.Job) gen.Job {
+	genJob := gen.Job{}
+
+	genJob.Id = job.Id.String()
+	if job.Kind == entity.JobKindInterval {
+		intervalString := job.Interval.String()
+		genJob.Interval = &intervalString
+	} else if job.Kind == entity.JobKindOnce {
+		onceString := time.UnixMilli(*job.Once).String()
+		genJob.Once = &onceString
 	}
 
-	return gen.GetJobsJobId200JSONResponse(genJob)
+	genJob.Payload = *job.Payload
+	genJob.Status = gen.Status(job.Status)
+	genJob.LastFinishedAt = job.LastFinishedAt
+
+	return genJob
 }

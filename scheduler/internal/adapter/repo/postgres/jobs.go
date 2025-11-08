@@ -2,15 +2,17 @@ package postgres
 
 import (
 	"context"
+	sql2 "database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	uuid2 "github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-	"time"
 )
 
 var _ repo.Jobs = (*JobsRepo)(nil)
@@ -43,28 +45,37 @@ func getConnString(cfg config.StorageConfig) string {
 func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 	ib := sqlbuilder.PostgreSQL.NewInsertBuilder()
 
-	var payloadValue interface{} = nil
-	if job.Payload != nil {
-		jsonBytes, err := json.Marshal(job.Payload)
-		if err != nil {
-			return err
-		}
-		payloadValue = string(jsonBytes)
-	}
-
-	var intervalValue interface{} = nil
-	if job.Interval != nil {
-		intervalValue = *job.Interval
+	payloadJSON, err := json.Marshal(job.Payload)
+	if err != nil {
+		return err
 	}
 
 	ib.InsertInto("job").
-		Cols("id", "inter", "payload", "status", "created_at").
-		Values(job.Id, intervalValue, payloadValue, job.Status, time.UnixMilli(job.CreatedAt))
+		Cols("id", "kind", "once", "interval_seconds", "payload", "status").
+		Values(
+			job.Id,
+			job.Kind,
+			sql2.NullInt64{
+				Valid: job.Once != nil,
+				Int64: func() int64 {
+					if job.Once != nil {
+						return *job.Once
+					}
+					return 0
+				}(),
+			},
+			job.Interval,
+			payloadJSON,
+			job.Status)
+
+	r.logger.Info("Job created", zap.String("job_id", job.Id.String()), zap.Int("job_kind", job.Kind), zap.Any("payload", job.Payload))
 
 	sql, args := ib.Build()
 
-	_, err := r.pool.Exec(ctx, sql, args...)
+	_, err = r.pool.Exec(ctx, sql, args...)
+
 	if err != nil {
+		r.logger.Error("Failed to insert", zap.Error(err))
 		return fmt.Errorf("failed to insert job: %w", err)
 	}
 
@@ -74,7 +85,7 @@ func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 
-	sb.Select("id", "inter", "payload", "status", "created_at", "last_finished_at").
+	sb.Select("id", "kind", "interval_seconds", "once", "payload", "status", "last_finished_at").
 		From("job").
 		Where(sb.Equal("id", jobID))
 
@@ -82,44 +93,39 @@ func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, er
 
 	var (
 		id             uuid2.UUID
-		interval       *string
-		payloadData    []byte
+		kind           int
+		interval       int64
+		once           *int64
+		payloadJSON    []byte
 		status         string
-		createdAt      time.Time
-		lastFinishedAt *time.Time
+		lastFinishedAt int64
 	)
 
 	err := r.pool.QueryRow(ctx, sql, args...).Scan(
-		&id, &interval, &payloadData, &status, &createdAt, &lastFinishedAt,
+		&id, &kind, &interval, &once, &payloadJSON, &status, &lastFinishedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repo.ErrJobIdNotFound
+		}
 		return nil, fmt.Errorf("failed to read job: %w", err)
 	}
 
-	var payload map[string]interface{}
-	if payloadData != nil {
-		if err := json.Unmarshal(payloadData, &payload); err != nil {
+	var payload map[string]any
+	if len(payloadJSON) > 0 {
+		if err := json.Unmarshal(payloadJSON, &payload); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 		}
 	}
 
-	var lastFinishedAtInt64 int64
-	if lastFinishedAt != nil {
-		lastFinishedAtInt64 = lastFinishedAt.UnixMilli()
-	}
-
 	res := &repo.JobDTO{
 		Id:             jobID,
+		Kind:           kind,
 		Interval:       interval,
 		Payload:        payload,
 		Status:         status,
-		CreatedAt:      createdAt.UnixMilli(),
-		LastFinishedAt: lastFinishedAtInt64,
-	}
-
-	if interval == nil {
-		once := "once"
-		res.Once = &once
+		LastFinishedAt: lastFinishedAt,
+		Once:           once,
 	}
 
 	return res, nil
@@ -150,11 +156,11 @@ func (r *JobsRepo) Delete(ctx context.Context, jobID uuid2.UUID) error {
 	return nil
 }
 
-func (r *JobsRepo) List(ctx context.Context, status string) ([]*repo.JobDTO, error) {
+func (r *JobsRepo) List(ctx context.Context) ([]*repo.JobDTO, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 
-	sb.Select("id", "inter", "payload", "status", "created_at", "last_finished_at").
-		From("job").Where(sb.Equal("status", status))
+	sb.Select("id", "kind", "interval_seconds", "once", "payload", "status", "last_finished_at").
+		From("job")
 
 	sql, args := sb.Build()
 
@@ -169,42 +175,36 @@ func (r *JobsRepo) List(ctx context.Context, status string) ([]*repo.JobDTO, err
 	for rows.Next() {
 		var (
 			id             uuid2.UUID
-			interval       *string
-			payloadData    []byte
+			kind           int
+			interval       int64
+			once           *int64
+			payloadJSON    []byte
 			status         string
-			createdAt      time.Time
-			lastFinishedAt *time.Time
+			lastFinishedAt int64
 		)
 
-		err := rows.Scan(&id, &interval, &payloadData, &status, &createdAt, &lastFinishedAt)
+		err := rows.Scan(
+			&id, &kind, &interval, &once, &payloadJSON, &status, &lastFinishedAt,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan job row: %w", err)
+			return nil, fmt.Errorf("failed to read job: %w", err)
 		}
 
-		var payload map[string]interface{}
-		if payloadData != nil {
-			if err := json.Unmarshal(payloadData, &payload); err != nil {
+		var payload map[string]any
+		if len(payloadJSON) > 0 {
+			if err := json.Unmarshal(payloadJSON, &payload); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
 			}
 		}
 
-		var lastFinishedAtInt64 int64
-		if lastFinishedAt != nil {
-			lastFinishedAtInt64 = lastFinishedAt.UnixMilli()
-		}
-
 		job := &repo.JobDTO{
 			Id:             id,
+			Kind:           kind,
 			Interval:       interval,
 			Payload:        payload,
 			Status:         status,
-			CreatedAt:      createdAt.UnixMilli(),
-			LastFinishedAt: lastFinishedAtInt64,
-		}
-
-		if interval == nil {
-			once := "once"
-			job.Once = &once
+			LastFinishedAt: lastFinishedAt,
+			Once:           once,
 		}
 
 		jobs = append(jobs, job)

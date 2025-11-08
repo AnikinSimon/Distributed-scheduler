@@ -1,13 +1,40 @@
 package entity
 
-import "github.com/google/uuid"
+import (
+	"context"
+	"github.com/google/uuid"
+	"time"
+)
+
+type JobKind int
+
+const (
+	JobKindUndefined = iota
+	JobKindOnce
+	JobKindInterval
+)
+
+type JobStatus string
+
+const (
+	JobStatusQueued    = "queued"
+	JobStatusRunning   = "running"
+	JobStatusFailed    = "failed"
+	JobStatusCompleted = "completed"
+)
 
 type Job struct {
-	CreatedAt      int64
 	Id             uuid.UUID
-	Interval       *string
+	Interval       *time.Duration
 	LastFinishedAt int64
-	Once           *string
-	Payload        map[string]interface{}
-	Status         string
+	Once           *int64
+	Payload        *map[string]interface{}
+	Status         JobStatus
+	Kind           JobKind
+}
+
+type RunningJob struct {
+	*Job
+
+	Cancel context.CancelFunc
 }

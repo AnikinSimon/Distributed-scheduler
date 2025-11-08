@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
@@ -22,7 +23,12 @@ func NewServer(schCase *cases.SchedulerCase) *Server {
 // Create a new job
 // (POST /jobs)
 func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject) (gen.PostJobsResponseObject, error) {
-	jobID, err := r.schedulerCase.Create(ctx, toEntityJob(request.Body))
+	entityJob, err := toEntityJob(request.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	jobID, err := r.schedulerCase.Create(ctx, entityJob)
 
 	if err != nil {
 		return nil, err // 500
@@ -42,22 +48,7 @@ func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) 
 	// Преобразуем entity.Job в gen.Job
 	jobs := make([]gen.Job, 0, len(jobsEntity))
 	for _, jobEntity := range jobsEntity {
-		job := gen.Job{
-			Id:             jobEntity.Id.String(),
-			Status:         gen.Status(jobEntity.Status),
-			CreatedAt:      jobEntity.CreatedAt,
-			LastFinishedAt: jobEntity.LastFinishedAt,
-			Payload:        jobEntity.Payload,
-		}
-
-		// Добавляем опциональные поля
-		if jobEntity.Interval != nil {
-			job.Interval = jobEntity.Interval
-
-		} else {
-			job.Once = jobEntity.Once
-		}
-
+		job := fromEntityJobGetGenJob(jobEntity)
 		jobs = append(jobs, job)
 	}
 
@@ -81,10 +72,13 @@ func (r *Server) GetJobsJobId(ctx context.Context, request gen.GetJobsJobIdReque
 	job, err := r.schedulerCase.Get(ctx, request.JobId)
 
 	if err != nil {
-		return gen.GetJobsJobId404Response{}, nil
+		if errors.Is(err, cases.ErrJobNotFound) {
+			return gen.GetJobsJobId404Response{}, nil
+		}
+		return nil, err
 	}
 
-	return fromEntityJobGetResponse(job), nil
+	return gen.GetJobsJobId200JSONResponse(fromEntityJobGetGenJob(job)), nil
 }
 
 // Get job executions

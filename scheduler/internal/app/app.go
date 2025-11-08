@@ -33,7 +33,7 @@ func Start(cfg config.Config) error {
 
 	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage, logger) // TODO: pg config
 
-	scheduler := cases.NewSchedulerCase(jobsRepo, logger)
+	scheduler := cases.NewSchedulerCase(jobsRepo, logger, cfg.SchedulerInterval)
 
 	server := handler.NewServer(scheduler)
 
