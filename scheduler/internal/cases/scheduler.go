@@ -8,6 +8,7 @@ import (
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/publisher"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,15 +23,17 @@ type SchedulerCase struct {
 	logger    *zap.Logger
 	interval  time.Duration
 	running   map[string]*entity.RunningJob
+	mu        sync.RWMutex
 	publisher publisher.Publisher
 }
 
-func NewSchedulerCase(jobsRepo repo.Jobs, logger *zap.Logger, interval time.Duration) *SchedulerCase {
+func NewSchedulerCase(jobsRepo repo.Jobs, logger *zap.Logger, interval time.Duration, pub publisher.Publisher) *SchedulerCase {
 	schedulerCase := &SchedulerCase{
-		jobsRepo: jobsRepo,
-		logger:   logger,
-		running:  make(map[string]*entity.RunningJob),
-		interval: time.Minute,
+		jobsRepo:  jobsRepo,
+		logger:    logger,
+		running:   make(map[string]*entity.RunningJob),
+		interval:  interval,
+		publisher: pub,
 	}
 	return schedulerCase
 }

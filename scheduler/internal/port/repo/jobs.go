@@ -9,7 +9,7 @@ import (
 type Jobs interface {
 	Create(ctx context.Context, job *JobDTO) error
 	Read(ctx context.Context, jobID uuid.UUID) (*JobDTO, error)
-	Update(ctx context.Context, job *JobDTO) error
+	Upsert(ctx context.Context, job []*JobDTO) error
 	Delete(ctx context.Context, jobID uuid.UUID) error
 	List(ctx context.Context) ([]*JobDTO, error)
 }

@@ -1,5 +1,6 @@
 env: "local"
-scheduler_interval: 1m
+scheduler_interval: 30s
+nats_url: "nats://nats:4222"
 storage:
   host: "postgres"
   user: "user"

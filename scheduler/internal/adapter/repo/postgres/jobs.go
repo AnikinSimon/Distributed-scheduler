@@ -131,8 +131,71 @@ func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, er
 	return res, nil
 }
 
-func (r *JobsRepo) Update(ctx context.Context, job *repo.JobDTO) error {
-	panic("not implemented")
+func (r *JobsRepo) Upsert(ctx context.Context, job []*repo.JobDTO) error {
+	ib := sqlbuilder.NewInsertBuilder()
+
+	for _, j := range job {
+		payloadJSON, err := json.Marshal(j.Payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal job payload: %w", err)
+		}
+
+		query := `
+			INSERT INTO job (id, kind, status, interval_seconds, once, last_finished_at, payload)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (id) DO UPDATE SET
+				status = EXCLUDED.status,
+				interval_seconds = EXCLUDED.interval_seconds,
+				last_finished_at = EXCLUDED.last_finished_at
+		`
+
+		//ib.
+		//	InsertInto("job").
+		//	Cols("id", "kind", "once", "interval_seconds", "payload", "status", "last_finished_at").
+		//	Values(
+		//		j.Id,
+		//		j.Kind,
+		//		sql2.NullInt64{
+		//			Valid: j.Once != nil,
+		//			Int64: func() int64 {
+		//				if j.Once != nil {
+		//					return *j.Once
+		//				}
+		//				return 0
+		//			}(),
+		//		},
+		//		j.Interval,
+		//		payloadJSON,
+		//		j.Status,
+		//		j.LastFinishedAt).
+		//	SQL("ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, interval_seconds = EXCLUDED.interval_seconds, last_finished_at = EXCLUDED.last_finished_at;")
+		//
+		//sql, args := ib.Build()
+
+		_, err = r.pool.Exec(ctx, query,
+			j.Id,
+			int(j.Kind),
+			string(j.Status),
+			j.Interval,
+			sql2.NullInt64{
+				Valid: j.Once != nil,
+				Int64: func() int64 {
+					if j.Once != nil {
+						return *j.Once
+					}
+					return 0
+				}(),
+			},
+			j.LastFinishedAt,
+			payloadJSON,
+		)
+		if err != nil {
+			r.logger.Error("Failed to upsert", zap.Error(err),
+				zap.String("query", ib.String()))
+			return fmt.Errorf("failed to upsert job: %w", err)
+		}
+	}
+
 	return nil
 }
 
