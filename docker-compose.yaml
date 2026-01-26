@@ -5,12 +5,17 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
     build:
       context: .
       dockerfile: Dockerfile
       target: scheduler
     ports:
       - "8090:8090"
+
     environment:
       - CONFIG_PATH=./config/local.yaml
 
