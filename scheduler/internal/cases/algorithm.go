@@ -16,7 +16,7 @@ func (s *SchedulerCase) Start(ctx context.Context) error {
 		case <-time.NewTimer(s.interval).C:
 			s.logger.Info("Tick started")
 			if err := s.tick(ctx); err != nil {
-				return err
+				s.logger.Error("Error tick", zap.Error(err))
 			}
 		case <-ctx.Done():
 			return ctx.Err()
@@ -37,10 +37,11 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 	for _, job := range jobs {
 		j := repo.JobEntityFromDTO(job)
 		repoJobs[job.Id.String()] = j
+		s.logger.Info("Job", zap.Any("job", j))
 	}
 
 	for jobId, job := range s.running {
-		if _, ok := s.running[jobId]; !ok {
+		if _, ok := repoJobs[jobId]; !ok {
 			s.logger.Debug("Stop deleted job", zap.String("jobId", jobId))
 			job.Cancel()
 			delete(s.running, jobId)
@@ -69,7 +70,8 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 			}
 		} else {
 			if job.Once != nil {
-				s.logger.Error("No jobOnce info", zap.Time("once", time.UnixMilli(*job.Once)))
+				s.logger.Info("Start job once", zap.String("jobId", jobId), zap.Int64("Once", *job.Once), zap.Int64("Now", now),
+					zap.Int64("Diff", *job.Once-now))
 				if job.LastFinishedAt == 0 && now > *job.Once {
 					go s.runJob(ctx, job)
 				}
@@ -112,6 +114,11 @@ func (s *SchedulerCase) HandleJobCompletion(ctx context.Context, jobID uuid.UUID
 		return fmt.Errorf("getting job: %w", err)
 	}
 
+	s.logger.Info("Job completion init",
+		zap.String("job_id", jobID.String()),
+		zap.String("status", status),
+		zap.Int64("finished_at", finishedAt))
+
 	switch status {
 	case entity.JobStatusCompleted:
 		job.Status = entity.JobStatusCompleted
@@ -126,7 +133,13 @@ func (s *SchedulerCase) HandleJobCompletion(ctx context.Context, jobID uuid.UUID
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if runningJob, ok := s.running[jobID.String()]; ok {
+		runningJob.Cancel()
+		delete(s.running, jobID.String())
+	}
+
 	if err := s.jobsRepo.Upsert(ctx, []*repo.JobDTO{job}); err != nil {
+		s.logger.Info("Failed to upsert")
 		return fmt.Errorf("upserting job failed: %w", err)
 	}
 
