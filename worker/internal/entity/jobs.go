@@ -2,8 +2,9 @@ package entity
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type JobKind int
@@ -24,7 +25,7 @@ const (
 )
 
 type Job struct {
-	Id             uuid.UUID
+	ID             uuid.UUID
 	Interval       *time.Duration
 	LastFinishedAt int64
 	Once           *int64

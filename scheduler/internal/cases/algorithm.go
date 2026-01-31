@@ -3,15 +3,15 @@ package cases
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"time"
 )
 
 func (s *SchedulerCase) Start(ctx context.Context) error {
-
 	for {
 		select {
 		case <-time.NewTimer(s.interval).C:
@@ -33,6 +33,16 @@ func (s *SchedulerCase) Start(ctx context.Context) error {
 	}
 }
 
+func (s *SchedulerCase) removeDeletedJobs(repoJobs map[string]*entity.Job) {
+	for jobID, job := range s.running {
+		if _, ok := repoJobs[jobID]; !ok {
+			s.logger.Debug("Stop deleted job", zap.String("jobID", jobID))
+			job.Cancel()
+			delete(s.running, jobID)
+		}
+	}
+}
+
 func (s *SchedulerCase) tick(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,47 +55,47 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 	repoJobs := make(map[string]*entity.Job, len(jobs))
 	for _, job := range jobs {
 		j := repo.JobEntityFromDTO(job)
-		repoJobs[job.Id.String()] = j
+		repoJobs[job.ID.String()] = j
 		s.logger.Info("Job", zap.Any("job", j))
 	}
 
-	for jobId, job := range s.running {
-		if _, ok := repoJobs[jobId]; !ok {
-			s.logger.Debug("Stop deleted job", zap.String("jobId", jobId))
-			job.Cancel()
-			delete(s.running, jobId)
-		}
-	}
+	s.removeDeletedJobs(repoJobs)
 
 	now := time.Now().UnixMilli()
 
 	var updates []*repo.JobDTO
 
-	for jobId, job := range repoJobs {
-		if _, ok := s.running[jobId]; ok {
-			s.logger.Debug("Skip running job", zap.String("jobId", jobId))
+	for jobID, job := range repoJobs {
+		if _, ok := s.running[jobID]; ok {
+			s.logger.Debug("Skip running job", zap.String("jobID", jobID))
 			continue
 		}
 		s.logger.Info("Start job",
-			zap.String("jobId", jobId),
+			zap.String("jobID", jobID),
 			zap.Int("kind", int(job.Kind)),
 			zap.Any("payload", job.Payload),
 			zap.String("status", string(job.Status)),
 		)
-		if job.Kind == entity.JobKindInterval {
-			s.logger.Info("Start interval job", zap.String("jobId", jobId), zap.Duration("interval", *job.Interval))
+		switch job.Kind {
+		case entity.JobKindInterval:
+			s.logger.Info("Start interval job", zap.String("jobID", jobID), zap.Duration("interval", *job.Interval))
 			if now > job.Interval.Milliseconds()+job.LastFinishedAt {
 				go s.runJob(ctx, job)
 			}
-		} else {
+		default:
 			if job.Once != nil {
-				s.logger.Info("Start job once", zap.String("jobId", jobId), zap.Int64("Once", *job.Once), zap.Int64("Now", now),
-					zap.Int64("Diff", *job.Once-now))
+				s.logger.Info(
+					"Start job once",
+					zap.String("jobID", jobID),
+					zap.Int64("Once", *job.Once),
+					zap.Int64("Now", now),
+					zap.Int64("Diff", *job.Once-now),
+				)
 				if job.LastFinishedAt == 0 && now > *job.Once {
 					go s.runJob(ctx, job)
 				}
 			} else {
-				s.logger.Error("No jobOnce info", zap.String("jobId", jobId))
+				s.logger.Error("No jobOnce info", zap.String("jobID", jobID))
 			}
 		}
 		job.Status = entity.JobStatusRunning
@@ -102,22 +112,26 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 func (s *SchedulerCase) runJob(ctx context.Context, job *entity.Job) {
 	s.logger.Info("Start running job", zap.Any("job", job))
 	ctx, cancel := context.WithCancel(ctx)
-	s.running[job.Id.String()] = &entity.RunningJob{
+	s.running[job.ID.String()] = &entity.RunningJob{
 		Job:    job,
 		Cancel: cancel,
 	}
 
 	if s.publisher != nil {
 		if err := s.publisher.Publish(ctx, job); err != nil {
-			s.logger.Error("Failed to publish job", zap.String("jobId", job.Id.String()), zap.Error(err))
+			s.logger.Error("Failed to publish job", zap.String("jobID", job.ID.String()), zap.Error(err))
 		}
 	} else {
-		s.logger.Info("Skip publishing job PUBLISHER IF NIL", zap.String("jobId", job.Id.String()))
+		s.logger.Info("Skip publishing job PUBLISHER IF NIL", zap.String("jobID", job.ID.String()))
 	}
-
 }
 
-func (s *SchedulerCase) HandleJobCompletion(ctx context.Context, jobID uuid.UUID, status string, finishedAt int64) error {
+func (s *SchedulerCase) HandleJobCompletion(
+	ctx context.Context,
+	jobID uuid.UUID,
+	status string,
+	finishedAt int64,
+) error {
 	job, err := s.jobsRepo.Read(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("getting job: %w", err)
@@ -158,5 +172,4 @@ func (s *SchedulerCase) HandleJobCompletion(ctx context.Context, jobID uuid.UUID
 		zap.Int64("finished_at", finishedAt))
 
 	return nil
-
 }

@@ -3,18 +3,19 @@ package config
 import (
 	"flag"
 	"fmt"
-	"github.com/ilyakaznacheev/cleanenv"
 	"os"
 	"time"
+
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
 // TODO add NATS
 
 type Config struct {
-	Env               string        `yaml:"env" env-default:"local"`
+	Env               string        `yaml:"env"                env-default:"local"`
 	SchedulerInterval time.Duration `yaml:"scheduler_interval" env-default:"1m"`
 	NATSURL           string        `yaml:"nats_url"`
-	Storage           StorageConfig `yaml:"storage" env-required:"true"`
+	Storage           StorageConfig `yaml:"storage"                                env-required:"true"`
 	HTTP              HTTPConfig    `yaml:"http"`
 	Redis             RedisConfig   `yaml:"redis"`
 }

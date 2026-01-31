@@ -3,6 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/publisher/nats"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/repo/postgres"
@@ -17,15 +23,12 @@ import (
 	"github.com/google/uuid"
 	goredislib "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 const (
-	mutexName = "scheduler-mutex"
+	mutexName         = "scheduler-mutex"
+	routerTimeout     = 60 * time.Second
+	readHeaderTimeout = 5 * time.Second
 )
 
 func Start(cfg config.Config) error {
@@ -97,15 +100,16 @@ func Start(cfg config.Config) error {
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
-	router.Use(middleware.Timeout(60 * time.Second))
+	router.Use(middleware.Timeout(routerTimeout))
 
 	gen.HandlerWithOptions(strictHandler, gen.ChiServerOptions{
 		BaseRouter: router,
 	})
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Handler:           router,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	go httpServer.ListenAndServe()

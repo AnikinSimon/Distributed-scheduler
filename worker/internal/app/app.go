@@ -3,12 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/worker/config"
 	nats2 "github.com/AnikinSimon/Distributed-scheduler/worker/internal/adapter/publisher/nats"
 	"github.com/AnikinSimon/Distributed-scheduler/worker/internal/adapter/subscriber/nats"
 	"github.com/AnikinSimon/Distributed-scheduler/worker/internal/entity"
 	"go.uber.org/zap"
-	"time"
 )
 
 func Start(cfg *config.Config) error {
@@ -32,21 +33,21 @@ func Start(cfg *config.Config) error {
 	if err := sub.Subscribe(ctx, func(ctx context.Context, job *entity.Job) error {
 		logger.Info(
 			"Received Job",
-			zap.String("job_id", job.Id.String()),
+			zap.String("job_id", job.ID.String()),
 			zap.Int("kind", int(job.Kind)),
 			zap.String("status", string(job.Status)),
 			zap.Any("payload", job.Payload),
 		)
 
 		completion := nats2.JobCompletion{
-			JobID:      job.Id.String(),
+			JobID:      job.ID.String(),
 			Status:     entity.JobStatusCompleted,
 			FinishedAt: time.Now().UnixMilli(),
 		}
 
-		if err := pub.Publish(ctx, completion); err != nil {
-			logger.Error("failed to publish completion", zap.Error(err))
-			return err
+		if errPub := pub.Publish(ctx, completion); err != nil {
+			logger.Error("failed to publish completion", zap.Error(errPub))
+			return errPub
 		}
 
 		return nil

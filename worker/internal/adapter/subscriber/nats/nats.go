@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/worker/internal/entity"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/zap"
-	"time"
 )
 
 type JobSubscriber struct {
@@ -133,17 +134,18 @@ func JobEntityFromDTO(job *JobDTO) (*entity.Job, error) {
 	ent := &entity.Job{}
 	id, err := uuid.Parse(job.ID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse UUID", zap.String("id", job.ID))
+		return nil, fmt.Errorf("failed to parse UUID %s", job.ID)
 	}
 
-	ent.Id = id
+	ent.ID = id
 	ent.Kind = entity.JobKind(job.Kind)
-	if ent.Kind == entity.JobKindOnce {
+	switch ent.Kind {
+	case entity.JobKindOnce:
 		ent.Once = job.Once
-	} else if ent.Kind == entity.JobKindInterval {
+	case entity.JobKindInterval:
 		dur, err := time.ParseDuration(*job.Interval)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse duration", zap.String("interval", *job.Interval))
+			return nil, fmt.Errorf("failed to parse duration %s", *job.Interval)
 		}
 		ent.Interval = &dur
 	}

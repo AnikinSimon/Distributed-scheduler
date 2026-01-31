@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/publisher"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	"github.com/go-redsync/redsync/v4"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -29,7 +30,13 @@ type SchedulerCase struct {
 	redisMutex *redsync.Mutex
 }
 
-func NewSchedulerCase(jobsRepo repo.Jobs, logger *zap.Logger, interval time.Duration, pub publisher.Publisher, redisMu *redsync.Mutex) *SchedulerCase {
+func NewSchedulerCase(
+	jobsRepo repo.Jobs,
+	logger *zap.Logger,
+	interval time.Duration,
+	pub publisher.Publisher,
+	redisMu *redsync.Mutex,
+) *SchedulerCase {
 	schedulerCase := &SchedulerCase{
 		jobsRepo:   jobsRepo,
 		logger:     logger,
@@ -46,10 +53,10 @@ func (s *SchedulerCase) Create(ctx context.Context, job *entity.Job) (string, er
 	if err != nil {
 		return "", err
 	}
-	job.Id = id
+	job.ID = id
 	job.Status = "queued"
 
-	s.logger.Info("Job Creating", zap.String("job_id", job.Id.String()), zap.Any("job", job))
+	s.logger.Info("Job Creating", zap.String("job_id", job.ID.String()), zap.Any("job", job))
 
 	jobDto := repo.JobDTOFromEntity(job)
 
@@ -66,10 +73,15 @@ func (s *SchedulerCase) Get(ctx context.Context, jobID string) (*entity.Job, err
 	jobDTO, err := s.jobsRepo.Read(ctx, id)
 
 	if err != nil {
-		if errors.Is(err, repo.ErrJobIdNotFound) {
+		if errors.Is(err, repo.ErrJobIDNotFound) {
 			return nil, ErrJobNotFound
 		}
-		s.logger.Error("failed to read job", zap.String("job_id", id.String()), zap.String("job_id", jobID), zap.Error(err))
+		s.logger.Error(
+			"failed to read job",
+			zap.String("job_id", id.String()),
+			zap.String("job_id", jobID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 

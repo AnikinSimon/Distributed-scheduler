@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/publisher"
 	"github.com/nats-io/nats.go"
@@ -40,7 +41,6 @@ func NewJobPublisher(ctx context.Context, url string, logger *zap.Logger) (*JobP
 		logger: logger,
 		js:     newJS,
 	}, nil
-
 }
 
 func (n *JobPublisher) Publish(ctx context.Context, job *entity.Job) error {
@@ -60,7 +60,12 @@ func (n *JobPublisher) Publish(ctx context.Context, job *entity.Job) error {
 
 	_, err = n.js.Publish(ctx, subject, data)
 	if err != nil {
-		n.logger.Error("Failed to publish payload", zap.Error(err), zap.String("subject", subject), zap.String("id", dto.ID))
+		n.logger.Error(
+			"Failed to publish payload",
+			zap.Error(err),
+			zap.String("subject", subject),
+			zap.String("id", dto.ID),
+		)
 		return fmt.Errorf("failed to publish Job to NATS: %w", err)
 	}
 

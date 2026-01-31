@@ -2,19 +2,21 @@ package publisher
 
 import (
 	"fmt"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 )
 
 func JobDTOFromEntity(job *entity.Job) (*JobDTO, error) {
 	dto := &JobDTO{}
-	dto.ID = job.Id.String()
+	dto.ID = job.ID.String()
 	dto.Kind = int(job.Kind)
-	if job.Kind == entity.JobKindOnce {
+	switch job.Kind {
+	case entity.JobKindOnce:
 		dto.Once = job.Once
-	} else if job.Kind == entity.JobKindInterval {
+	case entity.JobKindInterval:
 		durationStr := job.Interval.String()
 		dto.Interval = &durationStr
-	} else {
+	default:
 		return nil, fmt.Errorf("undefined job kind %d", job.Kind)
 	}
 	dto.Status = string(job.Status)

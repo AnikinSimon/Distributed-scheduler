@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
 )
@@ -21,7 +22,7 @@ func NewServer(schCase *cases.SchedulerCase) *Server {
 }
 
 // Create a new job
-// (POST /jobs)
+// (POST /jobs).
 func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject) (gen.PostJobsResponseObject, error) {
 	entityJob, err := toEntityJob(request.Body)
 	if err != nil {
@@ -38,7 +39,7 @@ func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject
 }
 
 // List jobs
-// (GET /jobs)
+// (GET /jobs).
 func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) (gen.GetJobsResponseObject, error) {
 	jobsEntity, err := r.schedulerCase.List(ctx, string(*request.Params.Status))
 	if err != nil {
@@ -56,8 +57,11 @@ func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) 
 }
 
 // Delete a job
-// (DELETE /jobs/{job_id})
-func (r *Server) DeleteJobsJobId(ctx context.Context, request gen.DeleteJobsJobIdRequestObject) (gen.DeleteJobsJobIdResponseObject, error) {
+// (DELETE /jobs/{job_id}).
+func (r *Server) DeleteJobsJobId(
+	ctx context.Context,
+	request gen.DeleteJobsJobIdRequestObject,
+) (gen.DeleteJobsJobIdResponseObject, error) {
 	err := r.schedulerCase.Delete(ctx, request.JobId)
 	if err != nil {
 		return gen.DeleteJobsJobId404Response{}, err
@@ -67,8 +71,11 @@ func (r *Server) DeleteJobsJobId(ctx context.Context, request gen.DeleteJobsJobI
 }
 
 // Get job details
-// (GET /jobs/{job_id})
-func (r *Server) GetJobsJobId(ctx context.Context, request gen.GetJobsJobIdRequestObject) (gen.GetJobsJobIdResponseObject, error) {
+// (GET /jobs/{job_id}).
+func (r *Server) GetJobsJobId(
+	ctx context.Context,
+	request gen.GetJobsJobIdRequestObject,
+) (gen.GetJobsJobIdResponseObject, error) {
 	job, err := r.schedulerCase.Get(ctx, request.JobId)
 
 	if err != nil {
@@ -82,7 +89,10 @@ func (r *Server) GetJobsJobId(ctx context.Context, request gen.GetJobsJobIdReque
 }
 
 // Get job executions
-// (GET /jobs/{job_id}/executions)
-func (r *Server) GetJobsJobIdExecutions(ctx context.Context, request gen.GetJobsJobIdExecutionsRequestObject) (gen.GetJobsJobIdExecutionsResponseObject, error) {
+// (GET /jobs/{job_id}/executions).
+func (r *Server) GetJobsJobIdExecutions(
+	ctx context.Context,
+	request gen.GetJobsJobIdExecutionsRequestObject,
+) (gen.GetJobsJobIdExecutionsResponseObject, error) {
 	panic("not implemented") // TODO: Implement
 }

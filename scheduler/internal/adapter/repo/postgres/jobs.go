@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	uuid2 "github.com/google/uuid"
@@ -34,11 +37,11 @@ func NewJobsRepo(ctx context.Context, cfg config.StorageConfig, logger *zap.Logg
 }
 
 func getConnString(cfg config.StorageConfig) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+	hostPort := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
 		cfg.User,
 		cfg.Password,
-		cfg.Host,
-		cfg.Port,
+		hostPort,
 		cfg.Database)
 }
 
@@ -53,7 +56,7 @@ func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 	ib.InsertInto("job").
 		Cols("id", "kind", "once", "interval_seconds", "payload", "status").
 		Values(
-			job.Id,
+			job.ID,
 			job.Kind,
 			sql2.NullInt64{
 				Valid: job.Once != nil,
@@ -68,7 +71,12 @@ func (r *JobsRepo) Create(ctx context.Context, job *repo.JobDTO) error {
 			payloadJSON,
 			job.Status)
 
-	r.logger.Info("Job created", zap.String("job_id", job.Id.String()), zap.Int("job_kind", job.Kind), zap.Any("payload", job.Payload))
+	r.logger.Info(
+		"Job created",
+		zap.String("job_id", job.ID.String()),
+		zap.Int("job_kind", job.Kind),
+		zap.Any("payload", job.Payload),
+	)
 
 	sql, args := ib.Build()
 
@@ -106,7 +114,7 @@ func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, er
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repo.ErrJobIdNotFound
+			return nil, repo.ErrJobIDNotFound
 		}
 		return nil, fmt.Errorf("failed to read job: %w", err)
 	}
@@ -119,7 +127,7 @@ func (r *JobsRepo) Read(ctx context.Context, jobID uuid2.UUID) (*repo.JobDTO, er
 	}
 
 	res := &repo.JobDTO{
-		Id:             jobID,
+		ID:             jobID,
 		Kind:           kind,
 		Interval:       interval,
 		Payload:        payload,
@@ -149,11 +157,11 @@ func (r *JobsRepo) Upsert(ctx context.Context, job []*repo.JobDTO) error {
 				last_finished_at = EXCLUDED.last_finished_at
 		`
 
-		//ib.
+		// ib.
 		//	InsertInto("job").
 		//	Cols("id", "kind", "once", "interval_seconds", "payload", "status", "last_finished_at").
 		//	Values(
-		//		j.Id,
+		//		j.ID,
 		//		j.Kind,
 		//		sql2.NullInt64{
 		//			Valid: j.Once != nil,
@@ -170,12 +178,12 @@ func (r *JobsRepo) Upsert(ctx context.Context, job []*repo.JobDTO) error {
 		//		j.LastFinishedAt).
 		//	SQL("ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, interval_seconds = EXCLUDED.interval_seconds, last_finished_at = EXCLUDED.last_finished_at;")
 		//
-		//sql, args := ib.Build()
+		// sql, args := ib.Build()
 
 		_, err = r.pool.Exec(ctx, query,
-			j.Id,
-			int(j.Kind),
-			string(j.Status),
+			j.ID,
+			j.Kind,
+			j.Status,
 			j.Interval,
 			sql2.NullInt64{
 				Valid: j.Once != nil,
@@ -261,7 +269,7 @@ func (r *JobsRepo) List(ctx context.Context) ([]*repo.JobDTO, error) {
 		}
 
 		job := &repo.JobDTO{
-			Id:             id,
+			ID:             id,
 			Kind:           kind,
 			Interval:       interval,
 			Payload:        payload,

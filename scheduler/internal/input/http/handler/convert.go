@@ -2,9 +2,10 @@ package handler
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
-	"time"
 )
 
 func toEntityJob(job *gen.JobCreate) (*entity.Job, error) {
@@ -33,11 +34,12 @@ func toEntityJob(job *gen.JobCreate) (*entity.Job, error) {
 func fromEntityJobGetGenJob(job *entity.Job) gen.Job {
 	genJob := gen.Job{}
 
-	genJob.Id = job.Id.String()
-	if job.Kind == entity.JobKindInterval {
+	genJob.Id = job.ID.String()
+	switch job.Kind {
+	case entity.JobKindInterval:
 		intervalString := job.Interval.String()
 		genJob.Interval = &intervalString
-	} else if job.Kind == entity.JobKindOnce {
+	case entity.JobKindOnce:
 		onceString := time.UnixMilli(*job.Once).String()
 		genJob.Once = &onceString
 	}

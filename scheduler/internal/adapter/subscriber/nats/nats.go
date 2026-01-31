@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/zap"
@@ -58,7 +59,11 @@ func (c *CompletionSubscriber) Subscribe(ctx context.Context, handler Completion
 	return nil
 }
 
-func (c *CompletionSubscriber) processMessages(ctx context.Context, cons jetstream.Consumer, handler CompletionHandler) {
+func (c *CompletionSubscriber) processMessages(
+	ctx context.Context,
+	cons jetstream.Consumer,
+	handler CompletionHandler,
+) {
 	iter, err := cons.Messages()
 	if err != nil {
 		c.logger.Error("failed to create message iterator", zap.Error(err))
@@ -81,7 +86,7 @@ func (c *CompletionSubscriber) processMessages(ctx context.Context, cons jetstre
 			var completion JobCompletion
 			if err := json.Unmarshal(msg.Data(), &completion); err != nil {
 				c.logger.Error("failed to unmarshal message from NATS", zap.Error(err))
-				msg.Nak()
+				_ = msg.Nak()
 				continue
 			}
 
@@ -89,12 +94,11 @@ func (c *CompletionSubscriber) processMessages(ctx context.Context, cons jetstre
 
 			if err := handler(ctx, completion); err != nil {
 				c.logger.Error("failed to process message from NATS", zap.Error(err))
-				msg.Nak()
+				_ = msg.Nak()
 				continue
 			}
 
-			msg.Ack()
+			_ = msg.Ack()
 		}
 	}
-
 }

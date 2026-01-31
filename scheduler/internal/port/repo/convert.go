@@ -1,17 +1,19 @@
 package repo
 
 import (
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 	"time"
+
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 )
 
 func JobDTOFromEntity(job *entity.Job) *JobDTO {
 	dto := &JobDTO{}
-	dto.Id = job.Id
+	dto.ID = job.ID
 	dto.Kind = int(job.Kind)
-	if job.Kind == entity.JobKindOnce {
+	switch job.Kind {
+	case entity.JobKindOnce:
 		dto.Once = job.Once
-	} else if job.Kind == entity.JobKindInterval {
+	case entity.JobKindInterval:
 		dto.Interval = int64(job.Interval.Seconds())
 	}
 	dto.Status = string(job.Status)
@@ -23,11 +25,12 @@ func JobDTOFromEntity(job *entity.Job) *JobDTO {
 
 func JobEntityFromDTO(job *JobDTO) *entity.Job {
 	ent := &entity.Job{}
-	ent.Id = job.Id
+	ent.ID = job.ID
 	ent.Kind = entity.JobKind(job.Kind)
-	if ent.Kind == entity.JobKindOnce {
+	switch ent.Kind {
+	case entity.JobKindOnce:
 		ent.Once = job.Once
-	} else if ent.Kind == entity.JobKindInterval {
+	case entity.JobKindInterval:
 		interval := time.Duration(job.Interval) * time.Second
 		ent.Interval = &interval
 	}

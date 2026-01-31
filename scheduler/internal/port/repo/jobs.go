@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+
 	"github.com/google/uuid"
 )
 
@@ -15,12 +16,12 @@ type Jobs interface {
 }
 
 var (
-	ErrJobIdNotFound = errors.New("job not found")
+	ErrJobIDNotFound = errors.New("job not found")
 )
 
 type JobDTO struct {
 	// Interface specific entity-like struct
-	Id             uuid.UUID
+	ID             uuid.UUID
 	Interval       int64
 	LastFinishedAt int64
 	Once           *int64

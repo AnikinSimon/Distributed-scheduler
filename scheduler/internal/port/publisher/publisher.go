@@ -2,6 +2,7 @@ package publisher
 
 import (
 	"context"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
 )
 
