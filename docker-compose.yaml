@@ -1,5 +1,5 @@
 services:
-  scheduler:
+  scheduler-1:
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,11 +15,75 @@ services:
       target: scheduler
     ports:
       - "8090:8090"
-
     environment:
       - CONFIG_PATH=./config/local.yaml
 
-  worker:
+  scheduler-2:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scheduler
+    ports:
+      - "8091:8090"
+    environment:
+      - CONFIG_PATH=./config/local.yaml
+
+  scheduler-3:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scheduler
+    ports:
+      - "8092:8090"
+    environment:
+      - CONFIG_PATH=./config/local.yaml
+
+  redis:
+    image: redis:8.6-rc1-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=password
+#      - REDIS_USER=user
+    command: redis-server --requirepass password
+    volumes:
+      - redis_data:/data
+
+  worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    environment:
+      - CONFIG_PATH=./config/local.yaml
+    depends_on:
+      nats:
+        condition: service_started
+      nats-init:
+        condition: service_completed_successfully
+
+  worker-2:
     build:
       context: .
       dockerfile: Dockerfile
@@ -110,3 +174,4 @@ services:
 volumes:
   postgres:
   nats_data:
+  redis_data:

@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
 	"os"
 	"time"
@@ -15,6 +16,7 @@ type Config struct {
 	NATSURL           string        `yaml:"nats_url"`
 	Storage           StorageConfig `yaml:"storage" env-required:"true"`
 	HTTP              HTTPConfig    `yaml:"http"`
+	Redis             RedisConfig   `yaml:"redis"`
 }
 
 type HTTPConfig struct {
@@ -27,6 +29,13 @@ type StorageConfig struct {
 	Password string `yaml:"password"`
 	Port     int    `yaml:"port"`
 	Database string `yaml:"database"`
+}
+
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Password string `yaml:"password"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
 }
 
 func MustLoad() Config {
@@ -64,4 +73,8 @@ func fetchConfigPath() string {
 	}
 
 	return res
+}
+
+func RedisConnString(cfg RedisConfig) string {
+	return fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 }

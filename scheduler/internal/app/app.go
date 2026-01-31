@@ -12,13 +12,20 @@ import (
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-redsync/redsync/v4"
+	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"github.com/google/uuid"
+	goredislib "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+)
+
+const (
+	mutexName = "scheduler-mutex"
 )
 
 func Start(cfg config.Config) error {
@@ -33,17 +40,30 @@ func Start(cfg config.Config) error {
 		return err
 	}
 
-	// TODO: add  nats url
-
 	pub, err := nats.NewJobPublisher(ctx, cfg.NATSURL, logger)
 	if err != nil {
 		logger.Error("Failed to create job publisher", zap.Error(err))
 		return err
 	}
 
+	client := goredislib.NewClient(&goredislib.Options{
+
+		Addr: config.RedisConnString(cfg.Redis),
+		//Username: cfg.Redis.User,
+		Password: cfg.Redis.Password,
+	})
+
+	pool := goredis.NewPool(client)
+
+	rs := redsync.New(pool)
+
+	redisMutex := rs.NewMutex(mutexName,
+		redsync.WithExpiry(cfg.SchedulerInterval+1*time.Second),
+		redsync.WithTries(1))
+
 	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage, logger)
 
-	scheduler := cases.NewSchedulerCase(jobsRepo, logger, cfg.SchedulerInterval, pub)
+	scheduler := cases.NewSchedulerCase(jobsRepo, logger, cfg.SchedulerInterval, pub, redisMutex)
 
 	sub, err := nats2.NewCompletionSubscriber(ctx, cfg.NATSURL, logger)
 	if err != nil {

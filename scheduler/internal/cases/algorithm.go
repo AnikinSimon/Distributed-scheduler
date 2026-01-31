@@ -11,14 +11,23 @@ import (
 )
 
 func (s *SchedulerCase) Start(ctx context.Context) error {
+
 	for {
 		select {
 		case <-time.NewTimer(s.interval).C:
+			if err := s.redisMutex.TryLock(); err != nil {
+				s.logger.Warn("Failed to lock", zap.Error(err))
+				continue
+			}
+			s.logger.Info("Lock acquired")
 			s.logger.Info("Tick started")
 			if err := s.tick(ctx); err != nil {
 				s.logger.Error("Error tick", zap.Error(err))
 			}
 		case <-ctx.Done():
+			if ok, err := s.redisMutex.Unlock(); !ok && err != nil {
+				s.logger.Error("Error stopping redis mutex", zap.Error(err))
+			}
 			return ctx.Err()
 		}
 	}
