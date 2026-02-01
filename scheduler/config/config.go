@@ -2,14 +2,22 @@ package config
 
 import (
 	"flag"
-	"github.com/ilyakaznacheev/cleanenv"
+	"fmt"
 	"os"
+	"time"
+
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
+// TODO add NATS
+
 type Config struct {
-	Env     string        `yaml:"env" env-default:"local"`
-	Storage StorageConfig `yaml:"storage" env-required:"true"`
-	HTTP    HTTPConfig    `yaml:"http"`
+	Env               string        `yaml:"env"                env-default:"local"`
+	SchedulerInterval time.Duration `yaml:"scheduler_interval" env-default:"1m"`
+	NATSURL           string        `yaml:"nats_url"`
+	Storage           StorageConfig `yaml:"storage"                                env-required:"true"`
+	HTTP              HTTPConfig    `yaml:"http"`
+	Redis             RedisConfig   `yaml:"redis"`
 }
 
 type HTTPConfig struct {
@@ -22,6 +30,13 @@ type StorageConfig struct {
 	Password string `yaml:"password"`
 	Port     int    `yaml:"port"`
 	Database string `yaml:"database"`
+}
+
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Password string `yaml:"password"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
 }
 
 func MustLoad() Config {
@@ -59,4 +74,8 @@ func fetchConfigPath() string {
 	}
 
 	return res
+}
+
+func RedisConnString(cfg RedisConfig) string {
+	return fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 }

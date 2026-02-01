@@ -2,68 +2,110 @@ package cases
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
-	"go.uber.org/zap"
+	"sync"
 	"time"
+
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/publisher"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
+	"github.com/go-redsync/redsync/v4"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 )
 
+var (
+	ErrJobNotFound = errors.New("job not found")
+)
+
 type SchedulerCase struct {
-	jobsRepo repo.Jobs
-	logger   *zap.Logger
+	jobsRepo       repo.Jobs
+	executionsRepo repo.Executions
+	logger         *zap.Logger
+	interval       time.Duration
+	running        map[string]*entity.RunningJob
+	mu             sync.RWMutex
+	publisher      publisher.Publisher
+	redisMutex     *redsync.Mutex
+	leaderStatus   int
 }
 
-func NewSchedulerCase(jobsRepo repo.Jobs, logger *zap.Logger) *SchedulerCase {
-	return &SchedulerCase{
-		jobsRepo: jobsRepo,
-		logger:   logger,
+func NewSchedulerCase(
+	jobsRepo repo.Jobs,
+	executionsRepo repo.Executions,
+	logger *zap.Logger,
+	interval time.Duration,
+	pub publisher.Publisher,
+	redisMu *redsync.Mutex,
+) *SchedulerCase {
+	schedulerCase := &SchedulerCase{
+		jobsRepo:       jobsRepo,
+		executionsRepo: executionsRepo,
+		logger:         logger,
+		running:        make(map[string]*entity.RunningJob),
+		interval:       interval,
+		publisher:      pub,
+		redisMutex:     redisMu,
+		leaderStatus:   0,
 	}
+	return schedulerCase
 }
 
-func (r *SchedulerCase) Create(ctx context.Context, job *entity.Job) (string, error) {
+func (s *SchedulerCase) Create(ctx context.Context, job *entity.Job) (string, error) {
 	id, err := uuid.NewUUID()
 	if err != nil {
 		return "", err
 	}
-	job.Id = id
-	job.CreatedAt = time.Now().UnixMilli()
+	job.ID = id
 	job.Status = "queued"
 
-	jobDto := repo.JobDTO(*job)
-	return id.String(), r.jobsRepo.Create(ctx, &jobDto)
+	s.logger.Info("Job Creating", zap.String("job_id", job.ID.String()), zap.Any("job", job))
+
+	jobDto := repo.JobDTOFromEntity(job)
+
+	return id.String(), s.jobsRepo.Create(ctx, jobDto)
 }
 
-func (r *SchedulerCase) Get(ctx context.Context, jobID string) (*entity.Job, error) {
+func (s *SchedulerCase) Get(ctx context.Context, jobID string) (*entity.Job, error) {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid job ID format: %w", err)
+		s.logger.Error("failed to parse job id", zap.String("job_id", jobID), zap.Error(err))
+		return nil, ErrJobNotFound
 	}
 
-	jobDTO, err := r.jobsRepo.Read(ctx, id)
+	jobDTO, err := s.jobsRepo.Read(ctx, id)
 
 	if err != nil {
+		if errors.Is(err, repo.ErrJobIDNotFound) {
+			return nil, ErrJobNotFound
+		}
+		s.logger.Error(
+			"failed to read job",
+			zap.String("job_id", id.String()),
+			zap.String("job_id", jobID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
-	job := entity.Job(*jobDTO)
+	job := repo.JobEntityFromDTO(jobDTO)
 
-	return &job, nil
+	return job, nil
 }
 
-func (r *SchedulerCase) Delete(ctx context.Context, jobID string) error {
+func (s *SchedulerCase) Delete(ctx context.Context, jobID string) error {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return fmt.Errorf("invalid job ID format: %w", err)
 	}
 
-	return r.jobsRepo.Delete(ctx, id)
+	return s.jobsRepo.Delete(ctx, id)
 }
 
-func (r *SchedulerCase) List(ctx context.Context, status string) ([]*entity.Job, error) {
-	jobsDTO, err := r.jobsRepo.List(ctx, status)
+func (s *SchedulerCase) List(ctx context.Context, status string) ([]*entity.Job, error) {
+	jobsDTO, err := s.jobsRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -71,8 +113,14 @@ func (r *SchedulerCase) List(ctx context.Context, status string) ([]*entity.Job,
 	jobs := make([]*entity.Job, len(jobsDTO))
 
 	for i := range jobsDTO {
-		jb := entity.Job(*jobsDTO[i])
-		jobs[i] = &jb
+		jobs[i] = repo.JobEntityFromDTO(jobsDTO[i])
 	}
 	return jobs, nil
+}
+
+func (s *SchedulerCase) ListExecutions(ctx context.Context, jobID uuid.UUID) ([]*entity.Execution, error) {
+	filter := &entity.ListExecutionFilter{
+		JobIDs: []uuid.UUID{jobID},
+	}
+	return s.executionsRepo.List(ctx, filter)
 }

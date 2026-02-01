@@ -2,11 +2,12 @@
 -- +goose StatementBegin
 create table if not exists job(
     id uuid primary key,
-    inter text,
-    payload jsonb,
+    kind int not null,
     status text not null,
-    created_at timestamp not null,
-    last_finished_at timestamp
+    interval_seconds bigint not null default 0,
+    once bigint,
+    last_finished_at bigint not null default 0,
+    payload jsonb
 );
 -- +goose StatementEnd
 

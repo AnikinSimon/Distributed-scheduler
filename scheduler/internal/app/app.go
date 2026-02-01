@@ -3,37 +3,97 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/repo/postgres"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
-	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/handler"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/config"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/publisher/nats"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/repo/postgres"
+	nats2 "github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/adapter/subscriber/nats"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
+	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/handler"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-redsync/redsync/v4"
+	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
+	"github.com/google/uuid"
+	goredislib "github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+)
+
+const (
+	mutexName         = "scheduler-mutex"
+	routerTimeout     = 60 * time.Second
+	readHeaderTimeout = 5 * time.Second
 )
 
 func Start(cfg config.Config) error {
-	// TODO: Create jobs repo
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger, err := zap.NewProduction()
 
+	defer cancel()
 	defer logger.Sync()
 
 	if err != nil {
 		return err
 	}
 
-	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage, logger) // TODO: pg config
+	pub, err := nats.NewJobPublisher(ctx, cfg.NATSURL, logger)
+	if err != nil {
+		logger.Error("Failed to create job publisher", zap.Error(err))
+		return err
+	}
 
-	scheduler := cases.NewSchedulerCase(jobsRepo, logger)
+	client := goredislib.NewClient(&goredislib.Options{
+
+		Addr: config.RedisConnString(cfg.Redis),
+		//Username: cfg.Redis.User,
+		Password: cfg.Redis.Password,
+	})
+
+	pool := goredis.NewPool(client)
+
+	rs := redsync.New(pool)
+
+	redisMutex := rs.NewMutex(mutexName,
+		redsync.WithExpiry(cfg.SchedulerInterval+1*time.Second),
+		redsync.WithTries(1))
+
+	pgPool, err := postgres.NewPostgresPool(ctx, cfg.Storage)
+	if err != nil {
+		panic(err)
+	}
+	jobsRepo := postgres.NewJobsRepo(pgPool, logger)
+	executionsRepo := postgres.NewExecutionRepo(pgPool, logger)
+
+	scheduler := cases.NewSchedulerCase(jobsRepo, executionsRepo, logger, cfg.SchedulerInterval, pub, redisMutex)
+
+	sub, err := nats2.NewCompletionSubscriber(ctx, cfg.NATSURL, logger)
+	if err != nil {
+		logger.Error("Failed to create completion subscriber", zap.Error(err))
+		return err
+	}
+
+	if err = sub.Subscribe(ctx, func(ctx context.Context, completion nats2.JobCompletion) error {
+		id, errUUID := uuid.Parse(completion.JobID)
+		if errUUID != nil {
+			return errUUID
+		}
+		return scheduler.HandleJobCompletion(ctx, id, completion.Status, completion.FinishedAt)
+	}); err != nil {
+		logger.Error("Failed to subscribe to completion", zap.Error(err))
+	}
+
+	go func() {
+		if err := scheduler.Start(ctx); err != nil {
+			logger.Error("Scheduler tick loop failed", zap.Error(err))
+		}
+	}()
 
 	server := handler.NewServer(scheduler)
 
@@ -45,20 +105,19 @@ func Start(cfg config.Config) error {
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
-	router.Use(middleware.Timeout(60 * time.Second))
+	router.Use(middleware.Timeout(routerTimeout))
 
 	gen.HandlerWithOptions(strictHandler, gen.ChiServerOptions{
 		BaseRouter: router,
 	})
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Handler:           router,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	go httpServer.ListenAndServe()
-
-	logger.Info("Stopping application", zap.Int("port", cfg.HTTP.Port))
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)

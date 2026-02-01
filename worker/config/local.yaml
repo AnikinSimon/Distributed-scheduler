@@ -1,0 +1,2 @@
+env: "local"
+nats_url: "nats://nats:4222"

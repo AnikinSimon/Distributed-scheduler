@@ -2,7 +2,10 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
+
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
 )
@@ -20,9 +23,14 @@ func NewServer(schCase *cases.SchedulerCase) *Server {
 }
 
 // Create a new job
-// (POST /jobs)
+// (POST /jobs).
 func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject) (gen.PostJobsResponseObject, error) {
-	jobID, err := r.schedulerCase.Create(ctx, toEntityJob(request.Body))
+	entityJob, err := toEntityJob(request.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	jobID, err := r.schedulerCase.Create(ctx, entityJob)
 
 	if err != nil {
 		return nil, err // 500
@@ -32,7 +40,7 @@ func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject
 }
 
 // List jobs
-// (GET /jobs)
+// (GET /jobs).
 func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) (gen.GetJobsResponseObject, error) {
 	jobsEntity, err := r.schedulerCase.List(ctx, string(*request.Params.Status))
 	if err != nil {
@@ -42,22 +50,7 @@ func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) 
 	// Преобразуем entity.Job в gen.Job
 	jobs := make([]gen.Job, 0, len(jobsEntity))
 	for _, jobEntity := range jobsEntity {
-		job := gen.Job{
-			Id:             jobEntity.Id.String(),
-			Status:         gen.Status(jobEntity.Status),
-			CreatedAt:      jobEntity.CreatedAt,
-			LastFinishedAt: jobEntity.LastFinishedAt,
-			Payload:        jobEntity.Payload,
-		}
-
-		// Добавляем опциональные поля
-		if jobEntity.Interval != nil {
-			job.Interval = jobEntity.Interval
-
-		} else {
-			job.Once = jobEntity.Once
-		}
-
+		job := fromEntityJobGetGenJob(jobEntity)
 		jobs = append(jobs, job)
 	}
 
@@ -65,8 +58,11 @@ func (r *Server) GetJobs(ctx context.Context, request gen.GetJobsRequestObject) 
 }
 
 // Delete a job
-// (DELETE /jobs/{job_id})
-func (r *Server) DeleteJobsJobId(ctx context.Context, request gen.DeleteJobsJobIdRequestObject) (gen.DeleteJobsJobIdResponseObject, error) {
+// (DELETE /jobs/{job_id}).
+func (r *Server) DeleteJobsJobId(
+	ctx context.Context,
+	request gen.DeleteJobsJobIdRequestObject,
+) (gen.DeleteJobsJobIdResponseObject, error) {
 	err := r.schedulerCase.Delete(ctx, request.JobId)
 	if err != nil {
 		return gen.DeleteJobsJobId404Response{}, err
@@ -76,19 +72,43 @@ func (r *Server) DeleteJobsJobId(ctx context.Context, request gen.DeleteJobsJobI
 }
 
 // Get job details
-// (GET /jobs/{job_id})
-func (r *Server) GetJobsJobId(ctx context.Context, request gen.GetJobsJobIdRequestObject) (gen.GetJobsJobIdResponseObject, error) {
+// (GET /jobs/{job_id}).
+func (r *Server) GetJobsJobId(
+	ctx context.Context,
+	request gen.GetJobsJobIdRequestObject,
+) (gen.GetJobsJobIdResponseObject, error) {
 	job, err := r.schedulerCase.Get(ctx, request.JobId)
 
 	if err != nil {
-		return gen.GetJobsJobId404Response{}, nil
+		if errors.Is(err, cases.ErrJobNotFound) {
+			return gen.GetJobsJobId404Response{}, nil
+		}
+		return nil, err
 	}
 
-	return fromEntityJobGetResponse(job), nil
+	return gen.GetJobsJobId200JSONResponse(fromEntityJobGetGenJob(job)), nil
 }
 
 // Get job executions
-// (GET /jobs/{job_id}/executions)
-func (r *Server) GetJobsJobIdExecutions(ctx context.Context, request gen.GetJobsJobIdExecutionsRequestObject) (gen.GetJobsJobIdExecutionsResponseObject, error) {
-	panic("not implemented") // TODO: Implement
+// (GET /jobs/{job_id}/executions).
+func (r *Server) GetJobsJobIdExecutions(
+	ctx context.Context,
+	request gen.GetJobsJobIdExecutionsRequestObject,
+) (gen.GetJobsJobIdExecutionsResponseObject, error) {
+	id, err := uuid.Parse(request.JobId)
+	if err != nil {
+		return nil, err
+	}
+
+	executions, err := r.schedulerCase.ListExecutions(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	genExecs := make([]gen.Execution, 0, len(executions))
+	for _, execution := range executions {
+		genExecs = append(genExecs, fromEntityExecGenExec(execution))
+	}
+
+	return gen.GetJobsJobIdExecutions200JSONResponse(genExecs), nil
 }
