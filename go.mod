@@ -8,6 +8,7 @@ require (
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-redsync/redsync/v4 v4.15.0
+	github.com/goccy/go-json v0.10.2
 	github.com/google/uuid v1.6.0
 	github.com/huandu/go-sqlbuilder v1.38.1
 	github.com/ilyakaznacheev/cleanenv v1.5.0

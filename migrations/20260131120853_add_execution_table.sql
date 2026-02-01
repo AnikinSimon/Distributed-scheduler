@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS execution (
     id uuid primary key,
-    job_id uuid references job(id),
+    job_id uuid not null,
     worker_id text not null,
     status text not null,
     queued_at BIGINT not null,

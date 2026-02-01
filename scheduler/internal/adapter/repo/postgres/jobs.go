@@ -25,11 +25,7 @@ type JobsRepo struct {
 	logger *zap.Logger
 }
 
-func NewJobsRepo(ctx context.Context, cfg config.StorageConfig, logger *zap.Logger) *JobsRepo {
-	pl, err := pgxpool.New(ctx, getConnString(cfg))
-	if err != nil {
-		panic(err)
-	}
+func NewJobsRepo(pl *pgxpool.Pool, logger *zap.Logger) *JobsRepo {
 	return &JobsRepo{
 		pool:   pl,
 		logger: logger,
@@ -156,29 +152,6 @@ func (r *JobsRepo) Upsert(ctx context.Context, job []*repo.JobDTO) error {
 				interval_seconds = EXCLUDED.interval_seconds,
 				last_finished_at = EXCLUDED.last_finished_at
 		`
-
-		// ib.
-		//	InsertInto("job").
-		//	Cols("id", "kind", "once", "interval_seconds", "payload", "status", "last_finished_at").
-		//	Values(
-		//		j.ID,
-		//		j.Kind,
-		//		sql2.NullInt64{
-		//			Valid: j.Once != nil,
-		//			Int64: func() int64 {
-		//				if j.Once != nil {
-		//					return *j.Once
-		//				}
-		//				return 0
-		//			}(),
-		//		},
-		//		j.Interval,
-		//		payloadJSON,
-		//		j.Status,
-		//		j.LastFinishedAt).
-		//	SQL("ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, interval_seconds = EXCLUDED.interval_seconds, last_finished_at = EXCLUDED.last_finished_at;")
-		//
-		// sql, args := ib.Build()
 
 		_, err = r.pool.Exec(ctx, query,
 			j.ID,

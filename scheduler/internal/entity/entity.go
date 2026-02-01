@@ -40,6 +40,32 @@ type RunningJob struct {
 	Cancel context.CancelFunc
 }
 
-type Exectution struct {
-	ID uuid.UUID
+type ExecutionStatus string
+
+const (
+	ExecutionStatusQueued    = "queued"
+	ExecutionStatusRunning   = "running"
+	ExecutionStatusFailed    = "failed"
+	ExecutionStatusCompleted = "completed"
+)
+
+type Execution struct {
+	ID         uuid.UUID
+	JobID      uuid.UUID
+	WorkerID   string
+	Status     ExecutionStatus
+	QueuedAt   int64
+	StartedAt  *int64
+	FinishedAt *int64
+	Error      *ExecutionError
+}
+
+type ExecutionError struct {
+	Details string `json:"details"`
+}
+
+type ListExecutionFilter struct {
+	IDs    []uuid.UUID
+	JobIDs []uuid.UUID
+	Status *ExecutionStatus
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/cases"
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/input/http/gen"
@@ -94,5 +95,20 @@ func (r *Server) GetJobsJobIdExecutions(
 	ctx context.Context,
 	request gen.GetJobsJobIdExecutionsRequestObject,
 ) (gen.GetJobsJobIdExecutionsResponseObject, error) {
-	panic("not implemented") // TODO: Implement
+	id, err := uuid.Parse(request.JobId)
+	if err != nil {
+		return nil, err
+	}
+
+	executions, err := r.schedulerCase.ListExecutions(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	genExecs := make([]gen.Execution, 0, len(executions))
+	for _, execution := range executions {
+		genExecs = append(genExecs, fromEntityExecGenExec(execution))
+	}
+
+	return gen.GetJobsJobIdExecutions200JSONResponse(genExecs), nil
 }

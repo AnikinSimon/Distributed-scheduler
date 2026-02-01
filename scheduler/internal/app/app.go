@@ -64,9 +64,14 @@ func Start(cfg config.Config) error {
 		redsync.WithExpiry(cfg.SchedulerInterval+1*time.Second),
 		redsync.WithTries(1))
 
-	jobsRepo := postgres.NewJobsRepo(ctx, cfg.Storage, logger)
+	pgPool, err := postgres.NewPostgresPool(ctx, cfg.Storage)
+	if err != nil {
+		panic(err)
+	}
+	jobsRepo := postgres.NewJobsRepo(pgPool, logger)
+	executionsRepo := postgres.NewExecutionRepo(pgPool, logger)
 
-	scheduler := cases.NewSchedulerCase(jobsRepo, logger, cfg.SchedulerInterval, pub, redisMutex)
+	scheduler := cases.NewSchedulerCase(jobsRepo, executionsRepo, logger, cfg.SchedulerInterval, pub, redisMutex)
 
 	sub, err := nats2.NewCompletionSubscriber(ctx, cfg.NATSURL, logger)
 	if err != nil {
@@ -85,7 +90,7 @@ func Start(cfg config.Config) error {
 	}
 
 	go func() {
-		if err := scheduler.Start(context.TODO()); err != nil {
+		if err := scheduler.Start(ctx); err != nil {
 			logger.Error("Scheduler tick loop failed", zap.Error(err))
 		}
 	}()

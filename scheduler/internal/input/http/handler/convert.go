@@ -50,3 +50,13 @@ func fromEntityJobGetGenJob(job *entity.Job) gen.Job {
 
 	return genJob
 }
+
+func fromEntityExecGenExec(exec *entity.Execution) gen.Execution {
+	return gen.Execution{
+		Id:       exec.ID.String(),
+		JobID:    exec.ID.String(),
+		Status:   gen.Status(exec.Status),
+		WorkerID: &exec.WorkerID,
+		QueuedAt: exec.QueuedAt,
+	}
+}

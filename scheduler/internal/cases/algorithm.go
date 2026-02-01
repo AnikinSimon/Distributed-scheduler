@@ -3,6 +3,7 @@ package cases
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/entity"
@@ -15,17 +16,27 @@ func (s *SchedulerCase) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-time.NewTimer(s.interval).C:
-			if err := s.redisMutex.TryLock(); err != nil {
-				s.logger.Warn("Failed to lock", zap.Error(err))
-				continue
+			mutexVal := s.redisMutex.Value()
+			s.logger.Info("Redis mutex value", zap.String("Value", mutexVal))
+			if mutexVal == "" {
+				if err := s.redisMutex.TryLockContext(ctx); err != nil {
+					s.logger.Warn("Failed to lock", zap.Error(err))
+					continue
+				}
+			} else {
+				if ok, err := s.redisMutex.ExtendContext(ctx); !ok || err != nil {
+					s.logger.Warn("Failed to extend lock", zap.Error(err))
+					continue
+				}
 			}
+
 			s.logger.Info("Lock acquired")
 			s.logger.Info("Tick started")
 			if err := s.tick(ctx); err != nil {
 				s.logger.Error("Error tick", zap.Error(err))
 			}
 		case <-ctx.Done():
-			if ok, err := s.redisMutex.Unlock(); !ok && err != nil {
+			if ok, err := s.redisMutex.UnlockContext(ctx); !ok && err != nil {
 				s.logger.Error("Error stopping redis mutex", zap.Error(err))
 			}
 			return ctx.Err()
@@ -44,9 +55,6 @@ func (s *SchedulerCase) removeDeletedJobs(repoJobs map[string]*entity.Job) {
 }
 
 func (s *SchedulerCase) tick(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	jobs, err := s.jobsRepo.List(ctx)
 	if err != nil {
 		return fmt.Errorf("listing jobs: %w", err)
@@ -64,6 +72,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 	now := time.Now().UnixMilli()
 
 	var updates []*repo.JobDTO
+	wg := &sync.WaitGroup{}
 
 	for jobID, job := range repoJobs {
 		if _, ok := s.running[jobID]; ok {
@@ -80,7 +89,8 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 		case entity.JobKindInterval:
 			s.logger.Info("Start interval job", zap.String("jobID", jobID), zap.Duration("interval", *job.Interval))
 			if now > job.Interval.Milliseconds()+job.LastFinishedAt {
-				go s.runJob(ctx, job)
+				wg.Add(1)
+				go s.runJob(ctx, job, wg)
 			}
 		default:
 			if job.Once != nil {
@@ -92,7 +102,8 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 					zap.Int64("Diff", *job.Once-now),
 				)
 				if job.LastFinishedAt == 0 && now > *job.Once {
-					go s.runJob(ctx, job)
+					wg.Add(1)
+					go s.runJob(ctx, job, wg)
 				}
 			} else {
 				s.logger.Error("No jobOnce info", zap.String("jobID", jobID))
@@ -101,7 +112,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 		job.Status = entity.JobStatusRunning
 		updates = append(updates, repo.JobDTOFromEntity(job))
 	}
-
+	wg.Wait()
 	if err := s.jobsRepo.Upsert(ctx, updates); err != nil {
 		return fmt.Errorf("upserting jobs failed: %w", err)
 	}
@@ -109,7 +120,8 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 	return nil
 }
 
-func (s *SchedulerCase) runJob(ctx context.Context, job *entity.Job) {
+func (s *SchedulerCase) runJob(ctx context.Context, job *entity.Job, wg *sync.WaitGroup) {
+	defer wg.Done()
 	s.logger.Info("Start running job", zap.Any("job", job))
 	ctx, cancel := context.WithCancel(ctx)
 	s.running[job.ID.String()] = &entity.RunningJob{
@@ -118,6 +130,17 @@ func (s *SchedulerCase) runJob(ctx context.Context, job *entity.Job) {
 	}
 
 	if s.publisher != nil {
+		exec := &entity.Execution{
+			ID:       uuid.New(),
+			JobID:    job.ID,
+			Status:   entity.ExecutionStatusQueued,
+			QueuedAt: time.Now().UnixMilli(),
+		}
+		if err := s.executionsRepo.Upsert(ctx, exec); err != nil {
+			s.logger.Error("Failed to upsert job", zap.String("job_id", job.ID.String()), zap.Error(err))
+			return
+		}
+
 		if err := s.publisher.Publish(ctx, job); err != nil {
 			s.logger.Error("Failed to publish job", zap.String("jobID", job.ID.String()), zap.Error(err))
 		}

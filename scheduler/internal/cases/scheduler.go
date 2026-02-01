@@ -21,29 +21,34 @@ var (
 )
 
 type SchedulerCase struct {
-	jobsRepo   repo.Jobs
-	logger     *zap.Logger
-	interval   time.Duration
-	running    map[string]*entity.RunningJob
-	mu         sync.RWMutex
-	publisher  publisher.Publisher
-	redisMutex *redsync.Mutex
+	jobsRepo       repo.Jobs
+	executionsRepo repo.Executions
+	logger         *zap.Logger
+	interval       time.Duration
+	running        map[string]*entity.RunningJob
+	mu             sync.RWMutex
+	publisher      publisher.Publisher
+	redisMutex     *redsync.Mutex
+	leaderStatus   int
 }
 
 func NewSchedulerCase(
 	jobsRepo repo.Jobs,
+	executionsRepo repo.Executions,
 	logger *zap.Logger,
 	interval time.Duration,
 	pub publisher.Publisher,
 	redisMu *redsync.Mutex,
 ) *SchedulerCase {
 	schedulerCase := &SchedulerCase{
-		jobsRepo:   jobsRepo,
-		logger:     logger,
-		running:    make(map[string]*entity.RunningJob),
-		interval:   interval,
-		publisher:  pub,
-		redisMutex: redisMu,
+		jobsRepo:       jobsRepo,
+		executionsRepo: executionsRepo,
+		logger:         logger,
+		running:        make(map[string]*entity.RunningJob),
+		interval:       interval,
+		publisher:      pub,
+		redisMutex:     redisMu,
+		leaderStatus:   0,
 	}
 	return schedulerCase
 }
@@ -111,4 +116,11 @@ func (s *SchedulerCase) List(ctx context.Context, status string) ([]*entity.Job,
 		jobs[i] = repo.JobEntityFromDTO(jobsDTO[i])
 	}
 	return jobs, nil
+}
+
+func (s *SchedulerCase) ListExecutions(ctx context.Context, jobID uuid.UUID) ([]*entity.Execution, error) {
+	filter := &entity.ListExecutionFilter{
+		JobIDs: []uuid.UUID{jobID},
+	}
+	return s.executionsRepo.List(ctx, filter)
 }
