@@ -43,6 +43,8 @@ func Start(cfg config.Config) error {
 		return err
 	}
 
+	logger.Info("Startup config", zap.Reflect("config", cfg))
+
 	pub, err := nats.NewJobPublisher(ctx, cfg.NATSURL, logger)
 	if err != nil {
 		logger.Error("Failed to create job publisher", zap.Error(err))

@@ -5,6 +5,13 @@ info:
 servers:
   - url: http://localhost:8090
 paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        '200':
+          description: 'Status OK'
+
   /jobs:
     post:
       summary: Create a new job
