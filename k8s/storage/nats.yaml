@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+  namespace: distributed-scheduler
+spec:
+  serviceName: nats
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10.7-alpine
+          command: ["nats-server"]  # Просто имя бинарника, без пути
+          args:
+            - "--jetstream"
+            - "--store_dir"
+            - "/data"
+            - "--http_port"
+            - "8222"
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitor
+              containerPort: 8222
+          volumeMounts:
+            - name: nats-data
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: 4222
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 4222
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+  volumeClaimTemplates:  # Используем volumeClaimTemplates для StatefulSet
+    - metadata:
+        name: nats-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: distributed-scheduler
+spec:
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: monitor
+      port: 8222
+      targetPort: 8222
+  selector:
+    app: nats
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-client
+  namespace: distributed-scheduler
+spec:
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: monitor
+      port: 8222
+      targetPort: 8222
+  selector:
+    app: nats
+  type: ClusterIP

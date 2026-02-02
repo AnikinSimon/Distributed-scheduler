@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nats-init
+  namespace: distributed-scheduler
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: nats-init
+          image: natsio/nats-box:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              sleep 10
+              echo "Initializing NATS JetStream..."
+              nats stream add JOBS \
+                --server=nats://nats-client.distributed-scheduler.svc.cluster.local:4222 \
+                --subjects "JOBS.interval.*" \
+                --subjects "JOBS.once.*" \
+                --subjects "JOBS.completed" \
+                --storage file \
+                --retention work \
+                --max-age 1d \
+                --replicas 1 \
+                --discard old \
+                --max-msgs=-1 \
+                --max-bytes=-1 \
+                --max-msg-size=-1 \
+                --dupe-window 2m \
+                --defaults
+              echo "NATS JetStream initialized with JOBS stream"
