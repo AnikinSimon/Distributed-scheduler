@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  namespace: distributed-scheduler
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrator
+          image: gomicro/goose:3.25.0
+          env:
+            - name: GOOSE_DRIVER
+              value: postgres
+            - name: GOOSE_DBSTRING
+              value: "user=user password=password host=postgres port=5432 dbname=scheduler sslmode=disable"
+            - name: GOOSE_MIGRATION_DIR
+              value: "/migrations"
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+          command: ["goose", "up"]
+      volumes:
+        - name: migrations
+          configMap:
+            name: migrations-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migrations-config
+  namespace: distributed-scheduler
+data:
+  # Здесь будут ваши миграции
+  20251026131049_add_jobs_table.sql:
+    |
+    -- +goose Up
+    -- +goose StatementBegin
+    create table if not exists job(
+    id uuid primary key,
+    kind int not null,
+    status text not null,
+    interval_seconds bigint not null default 0,
+    once bigint,
+    last_finished_at bigint not null default 0,
+    payload jsonb
+    );
+    -- +goose StatementEnd
+    
+    -- +goose Down
+    -- +goose StatementBegin
+    drop table if exists job;
+    -- +goose StatementEnd
+  20260131120853_add_execution_table.sql:
+    |
+    -- +goose Up
+    -- +goose StatementBegin
+    CREATE TABLE IF NOT EXISTS execution (
+    id uuid primary key,
+    job_id uuid not null,
+    worker_id text not null,
+    status text not null,
+    queued_at BIGINT not null,
+    started_at bigint,
+    finished_at bigint,
+    error jsonb
+    );
+    -- +goose StatementEnd
+    
+    -- +goose Down
+    -- +goose StatementBegin
+    DROP TABLE IF EXISTS execution;
+    -- +goose StatementEnd
+

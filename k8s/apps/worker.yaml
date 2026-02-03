@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: distributed-scheduler
+spec:
+  replicas: 3  # Три реплики, как у планировщиков
+  selector:
+    matchLabels:
+      app: scheduler
+      component: worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: scheduler
+        component: worker
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: docker.io/library/distributed-scheduler-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CONFIG_PATH
+              value: ./config/config.yaml
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+#          livenessProbe:
+#            tcpSocket:
+#              port: 9090  # Проверяем порт метрик
+#            initialDelaySeconds: 30
+#            periodSeconds: 10
+#            timeoutSeconds: 5
+#            failureThreshold: 3
+#          readinessProbe:
+#            exec:
+#              command:
+#                - /bin/sh
+#                - -c
+#                - |
+#                  # Проверяем что процесс запущен
+#                  ps aux | grep worker | grep -v grep
+#            initialDelaySeconds: 10
+#            periodSeconds: 5
+#            timeoutSeconds: 2
+#            failureThreshold: 1
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: config
+          configMap:
+            name: scheduler-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-service
+  namespace: distributed-scheduler
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: scheduler
+    component: worker
+  clusterIP: None  # Headless для доступа к конкретным подам
