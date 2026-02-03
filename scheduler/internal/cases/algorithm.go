@@ -3,6 +3,7 @@ package cases
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 	"time"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/AnikinSimon/Distributed-scheduler/scheduler/internal/port/repo"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+)
+
+var (
+	tasksPerWorkerGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "tasks_per_worker",
+		Help: "Number of tasks in queue per active worker",
+	})
 )
 
 func (s *SchedulerCase) Start(ctx context.Context) error {
@@ -74,6 +82,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 	var updates []*repo.JobDTO
 	wg := &sync.WaitGroup{}
 
+	total := 0
 	for jobID, job := range repoJobs {
 		if _, ok := s.running[jobID]; ok {
 			s.logger.Debug("Skip running job", zap.String("jobID", jobID))
@@ -90,6 +99,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 			s.logger.Info("Start interval job", zap.String("jobID", jobID), zap.Duration("interval", *job.Interval))
 			if now > job.Interval.Milliseconds()+job.LastFinishedAt {
 				wg.Add(1)
+				total++
 				go s.runJob(ctx, job, wg)
 			}
 		default:
@@ -103,6 +113,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 				)
 				if job.LastFinishedAt == 0 && now > *job.Once {
 					wg.Add(1)
+					total++
 					go s.runJob(ctx, job, wg)
 				}
 			} else {
@@ -112,6 +123,7 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 		job.Status = entity.JobStatusRunning
 		updates = append(updates, repo.JobDTOFromEntity(job))
 	}
+	tasksPerWorkerGauge.Set(float64(total))
 	wg.Wait()
 	if err := s.jobsRepo.Upsert(ctx, updates); err != nil {
 		return fmt.Errorf("upserting jobs failed: %w", err)

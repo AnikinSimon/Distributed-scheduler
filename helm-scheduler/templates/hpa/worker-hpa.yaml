@@ -1,0 +1,40 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  behavior:
+    {{- toYaml .Values.hpa.behavior | nindent 4 }}
+  metrics:
+    # Кастомная метрика: задачи на воркера
+    - type: Pods
+      pods:
+        metric:
+          name: worker_tasks_per_worker
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.hpa.targetTasksPerWorker }}
+
+    # Backup метрики
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

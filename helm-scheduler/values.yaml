@@ -1,0 +1,108 @@
+# Общие настройки
+namespace: distributed-scheduler
+environment: production
+
+# Реплики
+replicaCount:
+  scheduler: 3
+  worker: 2
+
+# Образы
+image:
+  repository: your-registry/distributed-scheduler
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Ресурсы
+resources:
+  scheduler:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  worker:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Базы данных
+postgres:
+  enabled: true
+  storage: 10Gi
+  user: user
+  password: password
+  database: scheduler
+
+redis:
+  enabled: true
+  storage: 5Gi
+  password: password
+
+nats:
+  enabled: true
+  storage: 10Gi
+  replicas: 3
+
+# HPA настройки
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetTasksPerWorker: 5  # Целевое количество задач на воркера
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 5
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 5
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+
+# Ingress
+ingress:
+  enabled: true
+  host: scheduler.local
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  tls: false
+
+# Prometheus Adapter (из подчарта)
+prometheus-adapter:
+  enabled: true
+  prometheus:
+    url: http://prometheus-server.monitoring.svc.cluster.local
+    port: 9090
+  rules:
+    custom:
+      - seriesQuery: 'worker_tasks_per_worker'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          matches: "worker_tasks_per_worker"
+          as: "tasks_per_worker"
+        metricsQuery: 'avg(worker_tasks_per_worker) by (pod)'
+
+# Миграции
+migrations:
+  enabled: true
+  image: gomicro/goose:3.25.0
+
+# Конфигурация приложения
+config:
+  natsUrl: "nats://nats:4222"
+  redisHost: "redis"
+  postgresHost: "postgres"
+  schedulerInterval: "30s"
+  workerConcurrency: 10

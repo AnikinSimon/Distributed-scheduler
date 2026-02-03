@@ -1,0 +1,10 @@
+apiVersion: v2
+name: distributed-scheduler
+description: A distributed task scheduler with worker auto-scaling
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: prometheus-adapter
+    version: 4.8.0
+    repository: file://charts/prometheus-adapter-subchart

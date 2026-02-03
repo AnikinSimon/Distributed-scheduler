@@ -1,0 +1,6 @@
+dependencies:
+- name: prometheus-adapter
+  repository: file://charts/prometheus-adapter-subchart
+  version: 4.8.0
+digest: sha256:5012f33be4794c72aa74462487c12e2c0f7696052a35602aaf90da0c0481ed0c
+generated: "2026-02-03T23:31:13.999349295+03:00"

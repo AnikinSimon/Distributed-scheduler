@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ func NewSchedulerCase(
 	pub publisher.Publisher,
 	redisMu *redsync.Mutex,
 ) *SchedulerCase {
+	prometheus.MustRegister(tasksPerWorkerGauge)
 	schedulerCase := &SchedulerCase{
 		jobsRepo:       jobsRepo,
 		executionsRepo: executionsRepo,
