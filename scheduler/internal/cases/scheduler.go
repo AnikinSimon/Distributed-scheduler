@@ -40,6 +40,7 @@ func NewSchedulerCase(
 	interval time.Duration,
 	pub publisher.Publisher,
 	redisMu *redsync.Mutex,
+	reg prometheus.Registerer,
 ) *SchedulerCase {
 	prometheus.MustRegister(tasksPerWorkerGauge)
 	schedulerCase := &SchedulerCase{
@@ -52,6 +53,7 @@ func NewSchedulerCase(
 		redisMutex:     redisMu,
 		leaderStatus:   0,
 	}
+	reg.MustRegister(tasksPerWorkerGauge)
 	return schedulerCase
 }
 

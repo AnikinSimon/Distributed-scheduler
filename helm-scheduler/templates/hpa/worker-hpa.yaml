@@ -10,31 +10,13 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: worker
-  minReplicas: {{ .Values.hpa.minReplicas }}
-  maxReplicas: {{ .Values.hpa.maxReplicas }}
-  behavior:
-    {{- toYaml .Values.hpa.behavior | nindent 4 }}
+  minReplicas: {{ .Values.worker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.worker.autoscaling.maxReplicas }}
   metrics:
-    # Кастомная метрика: задачи на воркера
     - type: Pods
       pods:
         metric:
-          name: worker_tasks_per_worker
+          name: nats_jetstream_consumer_pending_messages
         target:
           type: AverageValue
-          averageValue: {{ .Values.hpa.targetTasksPerWorker }}
-
-    # Backup метрики
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+          averageValue: {{ .Values.worker.autoscaling.targetQueueSize }}

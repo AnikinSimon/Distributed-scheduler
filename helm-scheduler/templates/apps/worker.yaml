@@ -20,16 +20,16 @@ spec:
         app: scheduler
         component: worker
         version: v1.0.0
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
-        prometheus.io/path: "/metrics"
+{{/*      annotations:*/}}
+{{/*        prometheus.io/scrape: "true"*/}}
+{{/*        prometheus.io/port: "8080"*/}}
+{{/*        prometheus.io/path: "/metrics"*/}}
     spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: worker
           image: docker.io/library/distributed-scheduler-worker:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           env:
             - name: POD_NAME
               valueFrom:

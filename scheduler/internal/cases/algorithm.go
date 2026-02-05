@@ -123,7 +123,11 @@ func (s *SchedulerCase) tick(ctx context.Context) error {
 		job.Status = entity.JobStatusRunning
 		updates = append(updates, repo.JobDTOFromEntity(job))
 	}
+	if total < 1 {
+		total = 1
+	}
 	tasksPerWorkerGauge.Set(float64(total))
+	s.logger.Info("Current number of jobs", zap.Any("jobs", tasksPerWorkerGauge.Desc()))
 	wg.Wait()
 	if err := s.jobsRepo.Upsert(ctx, updates); err != nil {
 		return fmt.Errorf("upserting jobs failed: %w", err)

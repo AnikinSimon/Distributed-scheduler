@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 	"os"
 	"os/signal"
@@ -73,7 +75,9 @@ func Start(cfg config.Config) error {
 	jobsRepo := postgres.NewJobsRepo(pgPool, logger)
 	executionsRepo := postgres.NewExecutionRepo(pgPool, logger)
 
-	scheduler := cases.NewSchedulerCase(jobsRepo, executionsRepo, logger, cfg.SchedulerInterval, pub, redisMutex)
+	reg := prometheus.NewRegistry()
+
+	scheduler := cases.NewSchedulerCase(jobsRepo, executionsRepo, logger, cfg.SchedulerInterval, pub, redisMutex, reg)
 
 	sub, err := nats2.NewCompletionSubscriber(ctx, cfg.NATSURL, logger)
 	if err != nil {
@@ -89,6 +93,7 @@ func Start(cfg config.Config) error {
 		return scheduler.HandleJobCompletion(ctx, id, completion.Status, completion.FinishedAt)
 	}); err != nil {
 		logger.Error("Failed to subscribe to completion", zap.Error(err))
+		return err
 	}
 
 	go func() {
@@ -112,6 +117,8 @@ func Start(cfg config.Config) error {
 	gen.HandlerWithOptions(strictHandler, gen.ChiServerOptions{
 		BaseRouter: router,
 	})
+
+	router.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),

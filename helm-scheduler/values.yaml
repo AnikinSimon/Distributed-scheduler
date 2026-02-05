@@ -76,23 +76,48 @@ ingress:
     nginx.ingress.kubernetes.io/rewrite-target: /
   tls: false
 
+worker:
+  replicaCount: 1
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetQueueSize: 5  # задач на один воркер
+    metrics:
+      - type: External
+        external:
+          metric:
+            name: nats_queue_messages_ready
+          target:
+            type: AverageValue
+            averageValue: 5
+
+
 # Prometheus Adapter (из подчарта)
 prometheus-adapter:
   enabled: true
+
+  # Реплики
+  replicaCount: 1
+
+  # Настройки Prometheus
   prometheus:
     url: http://prometheus-server.monitoring.svc.cluster.local
     port: 9090
+
+  # Правила для кастомных метрик
   rules:
     custom:
-      - seriesQuery: 'worker_tasks_per_worker'
+      - seriesQuery: 'tasks_per_worker'
         resources:
           overrides:
             namespace: {resource: "namespace"}
             pod: {resource: "pod"}
         name:
-          matches: "worker_tasks_per_worker"
+          matches: "tasks_per_worker"
           as: "tasks_per_worker"
-        metricsQuery: 'avg(worker_tasks_per_worker) by (pod)'
+        metricsQuery: 'avg(tasks_per_worker) by (pod)'
+
 
 # Миграции
 migrations:

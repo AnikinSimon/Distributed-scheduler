@@ -90,3 +90,57 @@ spec:
   selector:
     app: nats
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-metrics
+  labels:
+    app: nats
+spec:
+  ports:
+    - name: metrics
+      port: 7777
+      targetPort: 7777
+  selector:
+    app: nats
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-exporter
+  template:
+    metadata:
+      labels:
+        app: nats-exporter
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '7777'
+    spec:
+      containers:
+        - name: nats-exporter
+          image: natsio/prometheus-nats-exporter:latest
+          ports:
+            - containerPort: 7777
+          env:
+            - name: VARZ
+              value: "http://nats:8222/varz"
+            - name: CONNZ
+              value: "http://nats:8222/connz"
+            - name: ROUTEZ
+              value: "http://nats:8222/routez"
+            - name: SUBZ
+              value: "http://nats:8222/subsz"
+            - name: GATEWAYZ
+              value: "http://nats:8222/gatewayz"
+            - name: LEAFZ
+              value: "http://nats:8222/leafz"
+            - name: JETSTREAM
+              value: "http://nats:8222/jsz"
+            - name: HEALTHZ
+              value: "http://nats:8222/healthz"

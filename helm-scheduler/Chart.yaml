@@ -7,4 +7,5 @@ appVersion: "1.0.0"
 dependencies:
   - name: prometheus-adapter
     version: 4.8.0
-    repository: file://charts/prometheus-adapter-subchart
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus-adapter.enabled
