@@ -22,6 +22,10 @@ func NewServer(schCase *cases.SchedulerCase) *Server {
 	}
 }
 
+func (r *Server) GetHealth(ctx context.Context, request gen.GetHealthRequestObject) (gen.GetHealthResponseObject, error) {
+	return gen.GetHealth200Response{}, nil
+}
+
 // Create a new job
 // (POST /jobs).
 func (r *Server) PostJobs(ctx context.Context, request gen.PostJobsRequestObject) (gen.PostJobsResponseObject, error) {

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-config
+  namespace: distributed-scheduler
+data:
+  config.yaml: |
+    # Application config
+    env: "local"
+    scheduler_interval: 30s
+    nats_url: "nats://nats:4222"
+    storage:
+      host: "postgres"
+      user: "user"
+      password: "password"
+      port: 5432
+      database: "scheduler"
+    http:
+      port: 8080
+    redis:
+      user: "user"
+      host: "redis"
+      port: 6379
+      password: "password"
