@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scheduler-ingress
+  namespace: distributed-scheduler
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Отключить SSL для тестов
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: scheduler.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: scheduler-service  # ⬅️ ИСПРАВЛЕНО: было "scheduler"
+                port:
+                  number: 8080
+{{/*          - path: /metrics*/}}
+{{/*            pathType: Prefix*/}}
+{{/*            backend:*/}}
+{{/*              service:*/}}
+{{/*                name: scheduler-service  # ⬅️ ИСПРАВЛЕНО*/}}
+{{/*                port:*/}}
+{{/*                  number: 8080*/}}

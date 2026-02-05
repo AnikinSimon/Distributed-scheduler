@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: distributed-scheduler
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: distributed-scheduler
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: distributed-scheduler
+        component: scheduler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: scheduler
+          image: docker.io/library/distributed-scheduler-scheduler:latest
+          imagePullPolicy: Never  # Если образа нет, не пытаться скачать
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CONFIG_PATH
+              value: ./config/config.yaml
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: config
+          configMap:
+            name: scheduler-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scheduler-service
+  labels:
+    app: distributed-scheduler
+spec:
+  ports:
+    - port: 8080
+      nodePort: 30005
+  type: NodePort
+  selector:
+    app: distributed-scheduler

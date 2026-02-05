@@ -45,6 +45,8 @@ func Start(cfg *config.Config) error {
 			FinishedAt: time.Now().UnixMilli(),
 		}
 
+		time.Sleep(1 * time.Second)
+
 		if errPub := pub.Publish(ctx, completion); err != nil {
 			logger.Error("failed to publish completion", zap.Error(errPub))
 			return errPub
